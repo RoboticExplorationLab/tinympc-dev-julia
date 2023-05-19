@@ -116,6 +116,7 @@ function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max
 
     primal_residual = 1.0
     dual_residual = 1.0
+    status = 0
     iter = 1
     for k = 1:max_iter
         #Solver linear system with Riccati
@@ -137,18 +138,31 @@ function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max
         iter += 1
         
         if (primal_residual < abs_tol && dual_residual < abs_tol)
-            if (verbose == 1) 
-                display("Success!")
-            end
+            status = 1
             break
         end
     end
     # display("Maximum iteration reached!")
-    return z[1], iter
+    return z[1], status, iter
 end
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
     # convert a vector of vectors to a matrix 
     Xm = hcat(X...)
     return Xm 
+end
+
+function export_mat_to_c(declare, data)
+    str = "sfloat" * declare * "= {\n"
+    dataT = data'
+    for i = 1:size(dataT, 1)
+        str = str * "  "
+        for j = 1:size(dataT, 2)
+            this_str = @sprintf("%.6f", dataT[i, j])
+            str = str * this_str * "f,"
+        end
+        str = str * "\n"
+    end
+    str = str * "};"
+    return str
 end

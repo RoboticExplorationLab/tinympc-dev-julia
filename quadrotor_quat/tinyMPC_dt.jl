@@ -491,10 +491,3 @@ function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
     return Xm 
 end
 
-function shift_fill(U::Vector)
-    N = length(U)
-    for k = 1:N-1
-        U[k] .= U[k+1]
-    end
-    U[N] .= U[N-1]
-end

@@ -1,59 +1,81 @@
 #ADMM Functions
-function backward_pass!(A,B,Q,q,R,r,P,p,K,d,params)
+function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
     cache = params.cache
     N = params.N 
-    # P[N] .= cache.Pinf
-    P[N] .= params.Qf
-    # q[N] = -params.Qf * params.Xref[N]
-    p[N] .= q[N]
-    #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
-    #Cache data and use IHLQR to save memory (assume N is large)
-    for k = (N-1):-1:1
-        # r[k] .= -params.R*params.Uref[k]
-        K[k] .= (R + B'*P[k+1]*B)\(B'*P[k+1]*A)
-        d[k] .= (R + B'*P[k+1]*B)\(B'*p[k+1] + r[k])
+    if adaptive_step > 0
+        P[N] .= cache.Pinf2
+    else 
+        P[N] .= cache.Pinf
+    end    
+    p[N] .= -P[N]*params.Xref[N]
+    # A = 1*Ã
+    # B = 1*B̃
+    # #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
+    # #Cache data and use IHLQR to save memory
+    # for k = (N-1):-1:1
+    #     if (adaptive_step > 0 && k > adaptive_step)
+    #         A .= Ãs
+    #         B .= B̃s
+    #     else
+    #         A .= Ã
+    #         B .= B̃
+    #     end
+    #     r[k] .= -params.R*params.Uref[k]
+    #     K[k] .= (R + B'*P[k+1]*B)\(B'*P[k+1]*A)
+    #     d[k] .= (R + B'*P[k+1]*B)\(B'*p[k+1] + r[k])
         
-        # q[k] .= -params.Q * params.Xref[k]
-        P[k] .= Q + K[k]'*R*K[k] + (A-B*K[k])'*P[k+1]*(A-B*K[k])
-        p[k] .= q[k] + (A-B*K[k])'*(p[k+1]-P[k+1]*B*d[k]) + K[k]'*(R*d[k]-r[k])
-    end
-    cache.Kinf .= K[1]
-    cache.Pinf .= P[1]
-    cache.Quu_inv .= (R + B'*P[1]*B)\I
-    cache.AmBKt .= (A-B*K[1])'
+    #     q[k] .= -params.Q*params.Xref[k]
+    #     P[k] .= Q + K[k]'*R*K[k] + (A-B*K[k])'*P[k+1]*(A-B*K[k])
+    #     p[k] .= q[k] + (A-B*K[k])'*(p[k+1]-P[k+1]*B*d[k]) + K[k]'*(R*d[k]-r[k])
+    # end
+    # cache.Kinf .= K[1]
+    # cache.Pinf .= P[1]
+    # cache.Quu_inv .= (R + B'*P[1]*B)\I
+    # cache.AmBKt .= (A-B*K[1])'
 end
 
-# function backward_pass_grad!(A,B,q,R,r,P,p,K,d,params)
-#     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
-#     N = params.N 
-#     cache = params.cache
-#     for k = (N-1):-1:1
-#         d[k] .= cache.Quu_inv*(B'*p[k+1] + r[k])
-#         p[k] .= q[k] + cache.AmBKt*(p[k+1] - cache.Pinf*B*d[k]) + cache.Kinf'*(R*d[k] - r[k])
-#     end
-# end
-
-function backward_pass_grad!(A,B,q,R,r,P,p,K,d,params)
+function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     N = params.N 
     cache = params.cache
     for k = (N-1):-1:1
-        d[k] .= (R + B'*P[k+1]*B)\(B'*p[k+1] + r[k])
-        p[k] .= q[k] + (A-B*K[k])'*(p[k+1]-P[k+1]*B*d[k]) + K[k]'*(R*d[k]-r[k])
+        if (adaptive_step > 0 && k > adaptive_step)
+            d[k] .= cache.Quu_inv2*(B̃s'*p[k+1] + r[k])
+            p[k] .= q[k] + cache.AmBKt2*p[k+1] - cache.Kinf2'*r[k] + cache.coeff_d2p2*d[k]
+        else
+            d[k] .= cache.Quu_inv*(B̃'*p[k+1] + r[k])
+            p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
+        end
+        # if (adaptive_step > 0 && k > adaptive_step)
+        #     d[k] .= cache.Quu_inv2*(B̃s'*p[k+1] + r[k])
+        #     p[k] .= q[k] + cache.AmBKt2*(p[k+1]-cache.Pinf2*B̃s*d[k]) + cache.Kinf2'*(R*d[k]-r[k])
+        # else
+        #     d[k] .= cache.Quu_inv2*(B̃'*p[k+1] + r[k])
+        #     p[k] .= q[k] + cache.AmBKt2*(p[k+1]-cache.Pinf2*B̃*d[k]) + cache.Kinf2'*(R*d[k]-r[k])
+        # end
     end
 end
 
-function forward_pass!(A,B,K,d,x,u,params)
+function forward_pass!(K,d,x,u,params,adaptive_step)
     N = params.N 
     for k = 1:(N-1)
-        u[k] .= -K[k]*(x[k] + 0*params.Xref[k]) - d[k]
-        x[k+1] .= A*(x[k] + 1*params.Xref[k]) + B*(u[k] + 0*params.Uref[k]) - 1*params.Xref[k+1]
+        if (adaptive_step > 0 && k > adaptive_step)
+            A = 1*Ãs
+            B = 1*B̃s
+            u[k] .= -cache.Kinf2*x[k] - d[k] 
+            x[k+1] .= A*x[k] + B*u[k]
+        else
+            A = 1*Ã
+            B = 1*B̃
+            u[k] .= -cache.Kinf*x[k] - d[k] 
+            x[k+1] .= A*x[k] + B*u[k]
+        end
     end
 end
 
-function update_primal!(A,B,q,R̃,r,P,p,K,d,x,u,params)
-    backward_pass_grad!(A,B,q,R̃,r,P,p,K,d,params)
-    forward_pass!(A,B,K,d,x,u,params)
+function update_primal!(q,R̃,r,P,p,K,d,x,u,params,adaptive_step)
+    backward_pass_grad!(q,R̃,r,P,p,K,d,params,adaptive_step)
+    forward_pass!(K,d,x,u,params,adaptive_step)
 end
 
 function update_slack!(u,z,y,params)
@@ -75,26 +97,30 @@ function update_dual!(u,z,y)
     end
 end
 
-function update_linear_cost!(z,y,r,ρ,params)
+function update_linear_cost!(z,y,p,q,r,ρ,params)
     N = params.N
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(N-1)
-        r[k] .= -ρ*(z[k]-y[k])
+        r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]
+        q[k] .= -params.Q*params.Xref[k]
     end    
+    p[N] .= -P[N]*params.Xref[N]
 end
 
 #Main algorithm loop
-function solve_admm!(params,A,B,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max_iter=200)
-    forward_pass!(A,B,K,d,x,u,params)
+function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max_iter=200,adaptive_step)
+    forward_pass!(K,d,x,u,params,adaptive_step)
     update_slack!(u,z,y,params)
     update_dual!(u,z,y)
-    update_linear_cost!(z,y,r,ρ,params)
+    update_linear_cost!(z,y,p,q,r,ρ,params)
 
     primal_residual = 1.0
     dual_residual = 1.0
-    for iter = 1:max_iter
+    status = 0
+    iter = 1
+    for k = 1:max_iter
         #Solver linear system with Riccati
-        update_primal!(A,B,q,R̃,r,P,p,K,d,x,u,params)
+        update_primal!(q,R̃,r,P,p,K,d,x,u,params,adaptive_step)
 
         #Project z into feasible domain
         update_slack!(u,znew,y,params)
@@ -102,26 +128,34 @@ function solve_admm!(params,A,B,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2
         #Dual ascent
         update_dual!(u,znew,y)
 
-        update_linear_cost!(znew,y,r,ρ,params)
+        update_linear_cost!(znew,y,p,q,r,ρ,params)
         
-        primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(z)))
+        primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(znew)))
         dual_residual = maximum(abs.(ρ*(mat_from_vec(znew)-mat_from_vec(z))))
         
         z .= znew
+
+        iter += 1
         
-        if (primal_residual > abs_tol || dual_residual > abs_tol)
-            if (verbose == 1) 
-                display("Success!")
-            end
+        if (primal_residual < abs_tol && dual_residual < abs_tol)
+            status = 1
             break
         end
     end
     # display("Maximum iteration reached!")
-    return z[1]
+    return z[1], status, iter
 end
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
     # convert a vector of vectors to a matrix 
     Xm = hcat(X...)
     return Xm 
+end
+
+function shift_fill(U::Vector)
+    N = length(U)
+    for k = 1:N-1
+        U[k] .= U[k+1]
+    end
+    U[N] .= U[N-1]
 end
