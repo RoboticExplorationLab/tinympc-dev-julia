@@ -7,7 +7,6 @@ function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
     else 
         P[N] .= cache.Pinf
     end    
-    p[N] .= -P[N]*params.Xref[N]
     # A = 1*Ã
     # B = 1*B̃
     # #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
