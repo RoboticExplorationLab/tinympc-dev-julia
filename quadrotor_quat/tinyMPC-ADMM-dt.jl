@@ -1,93 +1,38 @@
 #ADMM Functions
 function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
-    # only used to initialize P[N]
-
     cache = params.cache
     N = params.N 
 
-    # P[N] .= 10*Q 
-
     if adaptive_step > 0
         P[N] .= cache.Pinf2
+        A = 1*Ã
+        B = 1*B̃
+        cache.Kinf .= cache.Quu_inv2*(B'*P[N]*A)
+        cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
+        cache.Quu_inv .= (R + B'*cache.Pinf*B)\I
+        cache.AmBKt .= (A-B*cache.Kinf)'
+        cache.coeff_d2p .= cache.Kinf'*R - cache.AmBKt*cache.Pinf*B
     else 
         P[N] .= cache.Pinf
     end    
-
-    # A = 1*Ã
-    # B = 1*B̃
-    # #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
-    # #Cache data and use IHLQR to save memory
-    for k = (N-1):-1:1
-        if (adaptive_step > 0 && k > adaptive_step)
-            A = 1*Ãs
-            B = 1*B̃s
-        else
-            A = 1*Ã
-            B = 1*B̃
-        end
-        # r[k] .= -params.R*params.Uref[k]
-        K[k] .= (R + B'*P[k+1]*B)\(B'*P[k+1]*A)
-        d[k] .= (R + B'*P[k+1]*B)\(B'*p[k+1] + r[k])
-        
-        # q[k] .= -params.Q*params.Xref[k]
-        P[k] .= Q + K[k]'*R*K[k] + (A-B*K[k])'*P[k+1]*(A-B*K[k])
-        p[k] .= q[k] + (A-B*K[k])'*(p[k+1]-P[k+1]*B*d[k]) + K[k]'*(R*d[k]-r[k])
-    end
-    # cache.Kinf .= K[1]
-    # cache.Pinf .= P[1]
-    # cache.Quu_inv .= (R + B'*P[1]*B)\I
-    # cache.AmBKt .= (A-B*K[1])'
 end
-
-# function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
-#     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
-#     N = params.N 
-#     cache = params.cache
-#     for k = (N-1):-1:1
-#         if (adaptive_step > 0 && k > adaptive_step)
-#             # display("long")
-#             d[k] .= cache.Quu_inv2*(B̃s'*p[k+1] + r[k])
-#             p[k] .= q[k] + cache.AmBKt2*p[k+1] - cache.Kinf2'*r[k] + cache.coeff_d2p2*d[k]
-#         else
-#             # display("short")
-#             d[k] .= cache.Quu_inv*(B̃'*p[k+1] + r[k])
-#             p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
-#         end
-#     end
-# end
 
 function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     N = params.N 
+    cache = params.cache
     for k = (N-1):-1:1
         if (adaptive_step > 0 && k > adaptive_step)
             # display("long")
-            d[k] .= (R + B̃s'*P[k+1]*B̃s)\(B̃s'*p[k+1] + r[k])
-            p[k] .= q[k] + (Ãs-B̃s*K[k])'*(p[k+1]-P[k+1]*B̃s*d[k]) + K[k]'*(R*d[k]-r[k])
+            d[k] .= cache.Quu_inv2*(B̃s'*p[k+1] + r[k])
+            p[k] .= q[k] + cache.AmBKt2*p[k+1] - cache.Kinf2'*r[k] + cache.coeff_d2p2*d[k]
         else
             # display("short")
-            d[k] .= (R + B̃'*P[k+1]*B̃)\(B̃'*p[k+1] + r[k])
-            p[k] .= q[k] + (Ã-B̃*K[k])'*(p[k+1]-P[k+1]*B̃*d[k]) + K[k]'*(R*d[k]-r[k])
+            d[k] .= cache.Quu_inv*(B̃'*p[k+1] + r[k])
+            p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
         end
     end
 end
-
-# function forward_pass!(K,d,x,u,params,adaptive_step)
-#     N = params.N 
-#     for k = 1:(N-1)
-#         if (adaptive_step > 0 && k > adaptive_step)
-#             A = 1*Ãs
-#             B = 1*B̃s
-#             u[k] .= -cache.Kinf2*x[k] - d[k] 
-#             x[k+1] .= A*x[k] + B*u[k]
-#         else
-#             A = 1*Ã
-#             B = 1*B̃
-#             u[k] .= -cache.Kinf*x[k] - d[k] 
-#             x[k+1] .= A*x[k] + B*u[k]
-#         end
-#     end
-# end
 
 function forward_pass!(K,d,x,u,params,adaptive_step)
     N = params.N 
@@ -95,12 +40,14 @@ function forward_pass!(K,d,x,u,params,adaptive_step)
         if (adaptive_step > 0 && k > adaptive_step)
             A = 1*Ãs
             B = 1*B̃s
+            u[k] .= -cache.Kinf2*x[k] - d[k] 
+            x[k+1] .= A*x[k] + B*u[k]
         else
             A = 1*Ã
             B = 1*B̃
+            u[k] .= -cache.Kinf*x[k] - d[k] 
+            x[k+1] .= A*x[k] + B*u[k]
         end
-        u[k] .= -K[k]*x[k] - d[k] 
-        x[k+1] .= A*x[k] + B*u[k]
     end
 end
 
