@@ -5,8 +5,6 @@ function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
     cache = params.cache
     N = params.N 
 
-    # P[N] .= 10*Q 
-
     if adaptive_step > 0
         P[N] .= cache.Pinf2
     else 
@@ -33,10 +31,6 @@ function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
         P[k] .= Q + K[k]'*R*K[k] + (A-B*K[k])'*P[k+1]*(A-B*K[k])
         p[k] .= q[k] + (A-B*K[k])'*(p[k+1]-P[k+1]*B*d[k]) + K[k]'*(R*d[k]-r[k])
     end
-    # cache.Kinf .= K[1]
-    # cache.Pinf .= P[1]
-    # cache.Quu_inv .= (R + B'*P[1]*B)\I
-    # cache.AmBKt .= (A-B*K[1])'
 end
 
 # function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)

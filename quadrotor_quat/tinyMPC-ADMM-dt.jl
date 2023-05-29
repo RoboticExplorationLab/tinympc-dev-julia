@@ -7,9 +7,10 @@ function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
         P[N] .= cache.Pinf2
         A = 1*Ã
         B = 1*B̃
-        cache.Kinf .= cache.Quu_inv2*(B'*P[N]*A)
+        cache.Quu_inv .= (R + B'*P[N]*B)\I
+        cache.Kinf .=  cache.Quu_inv*(B'*P[N]*A)
         cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
-        cache.Quu_inv .= (R + B'*cache.Pinf*B)\I
+        
         cache.AmBKt .= (A-B*cache.Kinf)'
         cache.coeff_d2p .= cache.Kinf'*R - cache.AmBKt*cache.Pinf*B
     else 
@@ -79,7 +80,7 @@ function update_linear_cost!(z,y,p,q,r,ρ,params)
     N = params.N
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(N-1)
-        r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]
+        r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
         q[k] .= -params.Q*params.Xref[k]
     end    
     p[N] .= -P[N]*params.Xref[N]
