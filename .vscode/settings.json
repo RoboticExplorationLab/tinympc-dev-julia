@@ -1,3 +1,4 @@
 {
-  "editor.scrollbar.verticalScrollbarSize": 16
+  "editor.scrollbar.verticalScrollbarSize": 16,
+  "ros.distro": "noetic"
 }
