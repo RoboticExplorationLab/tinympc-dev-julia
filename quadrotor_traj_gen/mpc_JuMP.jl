@@ -68,7 +68,7 @@ function mpc_JuMP!(optimizer, params, X, U, A, B, f; warm_start=true)
   
     # Goal constraint
     if params.ncg > 0 
-      @constraint(model, z[xinds[N]] .== params.Xref[N])
+      @constraint(model, z[xinds[Nh]] .== params.Xref[Nh])
     end    
   
     @time optimize!(model)   
@@ -152,7 +152,7 @@ function trajopt_JuMP!(optimizer, params, X, U, A, B, f; warm_start=true)
   
     # Goal constraint
     if params.ncg > 0 
-        @constraint(model, z[xinds[N]] .== params.Xref[N])
+        @constraint(model, z[xinds[Nh]] .== params.Xref[Nh])
     end    
   
     optimize!(model)   
