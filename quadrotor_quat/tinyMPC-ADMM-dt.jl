@@ -43,7 +43,8 @@ function update_linear_cost!(z, y, p, q, r, ρ, params)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
         q[k] .= -params.Q*params.Xref[k]
     end
-    p[N] .= -P[N]*params.Xref[N]
+    # p[N] .= -P[N]*params.Xref[N]
+    p[N] .= -params.cache.Pinf * params.Xref[N]
 end
 
 #Main algorithm loop
@@ -69,25 +70,53 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
     iter = 0
     # for k = 1:max_iter
     for k = 1:5
+        println("k = \n", k)
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
-        
-        if k == 5
-            println("k = 2\n")
-            println("q:\n", q)
-            println("r:\n", r)
-            println("p:\n", p)
-            println("d:\n", d)
-        end
 
+        println("after update_primal!:")
+        println("q: ", q[1])
+        println("r: ", r[1])
+        println("p: ", p[1])
+        println("d: ", d[1])
+        println("znew: ", znew[1])
+        println("y: ", y[1])
+        println("u: ", u[1])
 
         #Project z into feasible domain
         update_slack!(u, znew, y, params)
 
+        # println("after update_slack!:")
+        # println("q: ", q[1])
+        # println("r: ", r[1])
+        # println("p: ", p[1])
+        # println("d: ", d[1])
+        # println("znew: ", znew[1])
+        # println("y: ", y[1])
+        # println("u: ", u[1])
+
         #Dual ascent
         update_dual!(u, znew, y, params)
 
+        # println("after update_dual!:")
+        # println("q: ", q[1])
+        # println("r: ", r[1])
+        # println("p: ", p[1])
+        # println("d: ", d[1])
+        # println("znew: ", znew[1])
+        # println("y: ", y[1])
+        # println("u: ", u[1])
+
         update_linear_cost!(znew, y, p, q, r, ρ, params)
+
+        # println("after update_linear_cost!:")
+        # println("q: ", q[1])
+        # println("r: ", r[1])
+        # println("p: ", p[1])
+        # println("d: ", d[1])
+        # println("znew: ", znew[1])
+        # println("y: ", y[1])
+        # println("u: ", u[1])
         
         primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(znew)))
         dual_residual = maximum(abs.(ρ*(mat_from_vec(znew)-mat_from_vec(z))))
