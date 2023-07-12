@@ -1,24 +1,24 @@
 #ADMM Functions
-function backward_pass!(Q,q,R,r,P,p,K,d,params,adaptive_step)
+function backward_pass!(Q,q,R,r,P,p,K,d,params, adaptive_step=0)
     cache = params.cache
     N = params.N 
 
-    if adaptive_step > 0
-        P[N] .= cache.Pinf2
-        A = 1*Ã
-        B = 1*B̃
-        cache.Quu_inv .= (R + B'*P[N]*B)\I
-        cache.Kinf .=  cache.Quu_inv*(B'*P[N]*A)
-        cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
+    # if adaptive_step > 0
+    #     P[N] .= cache.Pinf2
+    #     A = 1*Ã
+    #     B = 1*B̃
+    #     cache.Quu_inv .= (R + B'*P[N]*B)\I
+    #     cache.Kinf .=  cache.Quu_inv*(B'*P[N]*A)
+    #     cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
         
-        cache.AmBKt .= (A-B*cache.Kinf)'
-        cache.coeff_d2p .= cache.Kinf'*R - cache.AmBKt*cache.Pinf*B
-    else 
-        P[N] .= cache.Pinf
-    end    
+    #     cache.AmBKt .= (A-B*cache.Kinf)'
+    #     cache.coeff_d2p .= cache.Kinf'*R - cache.AmBKt*cache.Pinf*B
+    # else 
+    P[N] .= cache.Pinf
+    # end    
 end
 
-function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
+function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step=0)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     N = params.N 
     cache = params.cache
@@ -35,7 +35,7 @@ function backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
     end
 end
 
-function forward_pass!(K,d,x,u,params,adaptive_step)
+function forward_pass!(K,d,x,u,params,adaptive_step=0)
     N = params.N 
     for k = 1:(N-1)
         if (adaptive_step > 0 && k > adaptive_step)
@@ -52,7 +52,7 @@ function forward_pass!(K,d,x,u,params,adaptive_step)
     end
 end
 
-function update_primal!(q,R,r,P,p,K,d,x,u,params,adaptive_step)
+function update_primal!(q,R,r,P,p,K,d,x,u,params,adaptive_step=0)
     backward_pass_grad!(q,R,r,P,p,K,d,params,adaptive_step)
     forward_pass!(K,d,x,u,params,adaptive_step)
 end
@@ -87,7 +87,7 @@ function update_linear_cost!(z,y,p,q,r,ρ,params)
 end
 
 #Main algorithm loop
-function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max_iter=200,adaptive_step)
+function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max_iter=200,adaptive_step=0)
     # forward_pass!(K,d,x,u,params,adaptive_step)
     # update_slack!(u,z,y,params)
     # update_dual!(u,z,y)
@@ -122,7 +122,7 @@ function solve_admm!(params,q,R̃,r,P,p,K,d,x,u,z,znew,y;ρ=1.0,abs_tol=1e-2,max
         end
     end
     # display("Maximum iteration reached!")
-    return znew[1], status, iter
+    return znew[1], status
 end
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
