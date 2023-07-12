@@ -43,8 +43,8 @@ function update_linear_cost!(z, y, p, q, r, ρ, params)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
         q[k] .= -params.Q*params.Xref[k]
     end
-    # p[N] .= -P[N]*params.Xref[N]
-    p[N] .= -params.cache.Pinf * params.Xref[N]
+    p[N] .= -P[N]*params.Xref[N]
+    # p[N] .= -params.cache.Pinf * params.Xref[N]
 end
 
 #Main algorithm loop
@@ -54,69 +54,23 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
     # update_dual!(u,z,y)
     # update_linear_cost!(z,y,p,q,r,ρ,params)
 
-    # println("q:\n", q)
-    # println("r:\n", r)
-    # println("p:\n", p)
-    # println("d:\n", d)
-    # println("q:\n", q)
-    # println("u:\n", u)
-    # println("z:\n", z)
-    # println("znew:\n", znew)
-    # println("y:\n", y)
 
     primal_residual = 1.0
     dual_residual = 1.0
     status = 0
     iter = 0
-    # for k = 1:max_iter
-    for k = 1:5
-        println("k = \n", k)
+    for k = 1:max_iter
+    # for k = 1:5
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
-
-        println("after update_primal!:")
-        println("q: ", q[1])
-        println("r: ", r[1])
-        println("p: ", p[1])
-        println("d: ", d[1])
-        println("znew: ", znew[1])
-        println("y: ", y[1])
-        println("u: ", u[1])
 
         #Project z into feasible domain
         update_slack!(u, znew, y, params)
 
-        # println("after update_slack!:")
-        # println("q: ", q[1])
-        # println("r: ", r[1])
-        # println("p: ", p[1])
-        # println("d: ", d[1])
-        # println("znew: ", znew[1])
-        # println("y: ", y[1])
-        # println("u: ", u[1])
-
         #Dual ascent
         update_dual!(u, znew, y, params)
 
-        # println("after update_dual!:")
-        # println("q: ", q[1])
-        # println("r: ", r[1])
-        # println("p: ", p[1])
-        # println("d: ", d[1])
-        # println("znew: ", znew[1])
-        # println("y: ", y[1])
-        # println("u: ", u[1])
-
         update_linear_cost!(znew, y, p, q, r, ρ, params)
-
-        # println("after update_linear_cost!:")
-        # println("q: ", q[1])
-        # println("r: ", r[1])
-        # println("p: ", p[1])
-        # println("d: ", d[1])
-        # println("znew: ", znew[1])
-        # println("y: ", y[1])
-        # println("u: ", u[1])
         
         primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(znew)))
         dual_residual = maximum(abs.(ρ*(mat_from_vec(znew)-mat_from_vec(z))))
@@ -130,8 +84,21 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
             break
         end
     end
-    # display("Maximum iteration reached!")
+
+    display("vals at end")
+    display(q)
+    display(r)
+    display(p)
+    display(d)
+    display(x)
+    display(u)
+    display(z)
+    display(y)
+    display(primal_residual)
+    display(dual_residual)
+
     return znew[1], status
+    # return znew, status
 end
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
