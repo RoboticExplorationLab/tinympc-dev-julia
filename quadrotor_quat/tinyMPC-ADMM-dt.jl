@@ -37,13 +37,18 @@ function update_dual!(u, z, y, params)
     end
 end
 
-function update_linear_cost!(z, y, p, q, r, ρ, params)
+function update_linear_cost!(x, z, y, p, q, r, ρ, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
+    xref = params.Xref
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
-        q[k] .= -params.Q*params.Xref[k]
+        ϕ = qtorp( L(params.Xref[k][4:7])' * rptoq(x[k][4:6]) )
+        Δx̃ = [x[k][1:3] - xref[k][1:3]; ϕ; x[k][7:9]-xref[k][8:10]; x[k][10:12]-xref[k][11:13]]
+        q[k] .= -params.Q*Δx̃
     end
-    p[N] .= -P[N]*params.Xref[N]
+    ϕ_end = qtorp( L(params.Xref[N][4:7])' * rptoq(x[N][4:6]) )
+    Δx̃_end = [x[N][1:3] - xref[N][1:3]; ϕ_end; x[N][7:9]-xref[N][8:10]; x[N][10:12]-xref[N][11:13]]
+    p[N] .= -P[N]*Δx̃_end
     # p[N] .= -params.cache.Pinf * params.Xref[N]
 end
 
@@ -70,7 +75,11 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
         #Dual ascent
         update_dual!(u, znew, y, params)
 
-        update_linear_cost!(znew, y, p, q, r, ρ, params)
+        update_linear_cost!(x, znew, y, p, q, r, ρ, params)
+
+        # display(mat_from_vec(u))
+        # display(mat_from_vec(znew))
+        # display(mat_from_vec(z))
         
         primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(znew)))
         dual_residual = maximum(abs.(ρ*(mat_from_vec(znew)-mat_from_vec(z))))
@@ -85,17 +94,21 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
         end
     end
 
-    display("vals at end")
-    display(q)
-    display(r)
-    display(p)
-    display(d)
-    display(x)
-    display(u)
-    display(z)
-    display(y)
-    display(primal_residual)
-    display(dual_residual)
+    # display(iter)
+    # display(primal_residual)
+    # display(dual_residual)
+
+    # display("vals at end")
+    # display(q)
+    # display(r)
+    # display(p)
+    # display(d)
+    # display(x)
+    # display(u)
+    # display(z)
+    # display(y)
+    # display(primal_residual)
+    # display(dual_residual)
 
     return znew[1], status
     # return znew, status
