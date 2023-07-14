@@ -42,30 +42,34 @@ function update_linear_cost!(x, z, y, p, q, r, ρ, params)
     xref = params.Xref
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
-        ϕ = qtorp( L(params.Xref[k][4:7])' * rptoq(x[k][4:6]) )
-        Δx̃ = [x[k][1:3] - xref[k][1:3]; ϕ; x[k][7:9]-xref[k][8:10]; x[k][10:12]-xref[k][11:13]]
-        q[k] .= -params.Q*Δx̃
+        # ϕ = qtorp( L(params.Xref[k][4:7])' * rptoq(x[k][4:6]) )
+        # Δx̃ = [x[k][1:3] - xref[k][1:3]; ϕ; x[k][7:9]-xref[k][8:10]; x[k][10:12]-xref[k][11:13]]
+        # q[k] .= -params.Q*Δx̃
+        q[k] .= -params.Q*params.Xref[k]
     end
-    ϕ_end = qtorp( L(params.Xref[N][4:7])' * rptoq(x[N][4:6]) )
-    Δx̃_end = [x[N][1:3] - xref[N][1:3]; ϕ_end; x[N][7:9]-xref[N][8:10]; x[N][10:12]-xref[N][11:13]]
-    p[N] .= -P[N]*Δx̃_end
-    # p[N] .= -params.cache.Pinf * params.Xref[N]
+    # ϕ_end = qtorp( L(params.Xref[N][4:7])' * rptoq(x[N][4:6]) )
+    # Δx̃_end = [x[N][1:3] - xref[N][1:3]; ϕ_end; x[N][7:9]-xref[N][8:10]; x[N][10:12]-xref[N][11:13]]
+    # p[N] .= -P[N]*Δx̃_end
+    # p[N] .= -P[N]*params.Xref[N]
+    p[N] .= -params.cache.Pinf*params.Xref[N]
 end
 
 #Main algorithm loop
 function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2, max_iter=200)
-    # forward_pass!(K,d,x,u,params,adaptive_step)
-    # update_slack!(u,z,y,params)
-    # update_dual!(u,z,y)
-    # update_linear_cost!(z,y,p,q,r,ρ,params)
+
 
 
     primal_residual = 1.0
     dual_residual = 1.0
     status = 0
-    iter = 0
+    iter = 1
+    cache = params.cache
+
+    forward_pass!(d, x, u, params)
+    update_slack!(u, z, y, params)
+    update_dual!(u, z, y, params)
+    update_linear_cost!(x, z, y, p, q, r, ρ, params)
     for k = 1:max_iter
-    # for k = 1:5
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
 
@@ -76,25 +80,23 @@ function solve_admm!(params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=1e-2,
         update_dual!(u, znew, y, params)
 
         update_linear_cost!(x, znew, y, p, q, r, ρ, params)
-
-        # display(mat_from_vec(u))
-        # display(mat_from_vec(znew))
-        # display(mat_from_vec(z))
         
         primal_residual = maximum(abs.(mat_from_vec(u)-mat_from_vec(znew)))
         dual_residual = maximum(abs.(ρ*(mat_from_vec(znew)-mat_from_vec(z))))
         
-        z .= znew
+        z = deepcopy(znew)
 
-        iter += 1
         
         if (primal_residual < abs_tol && dual_residual < abs_tol)
             status = 1
             break
         end
+
+        iter += 1
+
     end
 
-    # display(iter)
+    display(iter)
     # display(primal_residual)
     # display(dual_residual)
 
