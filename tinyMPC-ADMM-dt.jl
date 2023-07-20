@@ -1,50 +1,50 @@
 #ADMM Functions
-function backward_pass_grad!(q, r, p, d, params, N)
+function backward_pass_grad!(q, r, p, d, params)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     cache = params.cache
-    for k = (N-1):-1:1
+    for k = (params.N-1):-1:1
         # display("short")
         d[k] .= cache.Quu_inv*(cache.B̃'*p[k+1] + r[k])
         p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
     end
 end
 
-function forward_pass!(d, x, u, params, N)
+function forward_pass!(d, x, u, params)
     cache = params.cache
-    for k = 1:(N-1)
+    for k = 1:(params.N-1)
         u[k] .= -cache.Kinf*x[k] - d[k] 
         x[k+1] .= cache.Ã*x[k] + cache.B̃*u[k]
     end
 end
 
-function update_primal!(q, r, p, d, x, u, params, N)
-    backward_pass_grad!(q, r, p, d, params, N)
-    forward_pass!(d, x, u, params, N)
+function update_primal!(q, r, p, d, x, u, params)
+    backward_pass_grad!(q, r, p, d, params)
+    forward_pass!(d, x, u, params)
 end
 
-function update_slack!(u, z, y, params, N)
+function update_slack!(u, z, y, params)
     #This function clamps the controls to be within the bounds
-    for k = 1:(N-1)
+    for k = 1:(params.N-1)
         z[k] .= min.(params.umax, max.(params.umin, u[k]+y[k]))
     end
 end
 
-function update_dual!(u, z, y, params, N)
+function update_dual!(u, z, y, params)
     #This function performs the standard AL multiplier update.
     #Note that we're using the "scaled form" where y = λ/ρ
-    for k = 1:(N-1)
+    for k = 1:(params.N-1)
         y[k] .= y[k] + u[k] - z[k]
     end
 end
 
-function update_linear_cost!(x, z, y, p, q, r, ρ, params, N)
+function update_linear_cost!(x, z, y, p, q, r, ρ, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     xref = params.Xref
-    for k = 1:(N-1)
+    for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
         q[k] .= -params.Q*params.Xref[k]
     end
-    p[N] .= -params.cache.Pinf*params.Xref[N]
+    p[params.N] .= -params.cache.Pinf*params.Xref[params.N]
 end
 
 #Main algorithm loop
@@ -55,23 +55,21 @@ function solve_admm!(vis, params, q, r, p, d, x, u, z, znew, y; ρ=1.0, abs_tol=
     status = 0
     iter = 1
 
-    N = length(x) # maybe check that length(x) = len(p,q) = len(d,r,y,znew,z,u)-1
-
-    forward_pass!(d, x, u, params, N)
-    update_slack!(u, z, y, params, N)
-    update_dual!(u, z, y, params, N)
-    update_linear_cost!(x, z, y, p, q, r, ρ, params, N)
+    forward_pass!(d, x, u, params)
+    update_slack!(u, z, y, params)
+    update_dual!(u, z, y, params)
+    update_linear_cost!(x, z, y, p, q, r, ρ, params)
     for k = 1:max_iter
         #Solver linear system with Riccati
-        update_primal!(q, r, p, d, x, u, params, N)
+        update_primal!(q, r, p, d, x, u, params)
 
         #Project z into feasible domain
-        update_slack!(u, znew, y, params, N)
+        update_slack!(u, znew, y, params)
 
         #Dual ascent
-        update_dual!(u, znew, y, params, N)
+        update_dual!(u, znew, y, params)
 
-        update_linear_cost!(x, znew, y, p, q, r, ρ, params, N)
+        update_linear_cost!(x, znew, y, p, q, r, ρ, params)
         
         primal_residual = maximum(abs.(hcat(u...) - hcat(znew...)))
         dual_residual = maximum(abs.(ρ*(hcat(znew...) - hcat(z...))))

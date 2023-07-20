@@ -1,4 +1,5 @@
 {
   "editor.scrollbar.verticalScrollbarSize": 16,
-  "ros.distro": "noetic"
+  "ros.distro": "noetic",
+  "cmake.configureOnOpen": false
 }
