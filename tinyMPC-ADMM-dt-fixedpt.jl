@@ -4,14 +4,13 @@ function backward_pass_grad!(q, r, p, d, params)
     cache = params.cache
     for k = (params.N-1):-1:1
         d[k] .= cache.Qu1*p[k+1] + cache.Qu2*r[k]
-        p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
+        p[k] .= q[k] + cache.AmBKt*p[k+1] + cache.coeff_d2p*d[k] - cache.Kt*r[k]
     end
 end
 
 function forward_pass!(d, x, u, params)
     cache = params.cache
     for k = 1:(params.N-1)
-        # display(x[k]) 
         u[k] .= -cache.Kinf*x[k] - d[k]
         x[k+1] .= round.(cache.A*x[k]/params.fixed_A_divisor + cache.B*u[k]/params.fixed_B_divisor)
     end

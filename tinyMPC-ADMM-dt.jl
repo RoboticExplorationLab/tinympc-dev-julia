@@ -11,9 +11,8 @@ end
 function forward_pass!(d, x, u, params)
     cache = params.cache
     for k = 1:(params.N-1)
-        # display(x[k]) 
         u[k] .= -cache.Kinf*x[k] - d[k]
-        x[k+1] .= round.(cache.A*x[k]/params.fixed_A_divisor + cache.B*u[k]/params.fixed_B_divisor)
+        x[k+1] .= cache.A*x[k] + cache.B*u[k]
     end
 end
 
