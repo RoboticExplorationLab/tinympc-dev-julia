@@ -3,7 +3,7 @@ function backward_pass_grad!(q, r, p, d, params)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     cache = params.cache
     for k = (params.N-1):-1:1
-        d[k] .= cache.Quu_inv*(cache.B'*p[k+1] + r[k])
+        d[k] .= cache.Qu1*p[k+1] + cache.Qu2*r[k]
         p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
     end
 end
