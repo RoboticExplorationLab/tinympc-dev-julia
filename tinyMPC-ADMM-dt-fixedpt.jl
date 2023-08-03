@@ -3,8 +3,8 @@ function backward_pass_grad!(q, r, p, d, params)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     cache = params.cache
     for k = (params.N-1):-1:1
-        d[k] .= cache.Qu1*p[k+1] + cache.Qu2*r[k]
-        p[k] .= q[k] + cache.AmBKt*p[k+1] + cache.coeff_d2p*d[k] - cache.Kt*r[k]
+        d[k] .= round.(cache.Qu1*p[k+1]/1000) + round.(cache.Qu2*r[k]/100)
+        p[k] .= q[k] + round.(cache.AmBKt*p[k+1]/100) + round.(cache.coeff_d2p*d[k]/10000) - round.(cache.Kt*r[k]/10000)
     end
 end
 
@@ -38,7 +38,6 @@ end
 
 function update_linear_cost!(x, z, y, p, q, r, ρ, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
-    xref = params.Xref
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k]  # original R
         q[k] .= -params.Q*params.Xref[k]
