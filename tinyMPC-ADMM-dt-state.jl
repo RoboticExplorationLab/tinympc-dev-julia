@@ -28,15 +28,17 @@ function update_primal!(q, r, p, d, x, u, params)
     forward_pass!(d, x, u, params)
 end
 
-function project_hyperplane(k, vis, x, A, q)
+function project_hyperplane(k, vis, x, A, b)
     a = A[1:2]
     x_xy = x[1:2]
-    if a'*x_xy - a'*q <= 0
+    if a'*x_xy - b <= 0
         return x
     else
-        x_xy_new = [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]/(a[1]^2+a[2]^2) * (x_xy-q) + q
+        # x_xy_new = [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]/(a[1]^2+a[2]^2) * (x_xy-q) + q
+        denom = a'*a
+        x_xy_new = [a[1]; a[2]]*b/denom + [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]*x_xy/denom
 
-        if k == 1
+        if k == -1
             # display(a'*x_xy_new - a'*q)
 
             # sleep(.1)
@@ -60,7 +62,7 @@ function update_slack!(vis, x, v, g, u, z, y, params)
     end
     for k = 1:params.N
         # v[k] .= min.(params.xmax[k], max.(params.xmin[k], x[k] + g[k]))
-        v[k] .= project_hyperplane(k, vis, x[k] + g[k], params.A[k], params.xmax[k])
+        v[k] .= project_hyperplane(k, vis, x[k] + g[k], params.A[k], params.xmax[k][1])
     end
     # display(xmax[1][1])
 end
