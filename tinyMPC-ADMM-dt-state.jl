@@ -81,7 +81,6 @@ function update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k] # original R
         q[k] .= -ρ*(v[k]-g[k]) - params.Q*params.Xref[k]
-
     end
     p[params.N] .= -params.cache.Pinf*(params.Xref[params.N] - g[params.N])
 end
