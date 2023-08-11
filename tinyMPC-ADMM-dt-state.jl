@@ -59,8 +59,8 @@ function update_slack!(vis, x, v, g, u, z, y, params)
         z[k] .= min.(params.umax, max.(params.umin, u[k] + y[k])) # TODO: convert u[k] + y[k] to params.A*u[k] + params.b + y[k] or combine into one slack and dual update
     end
     for k = 1:params.N
-        # v[k] .= min.(params.xmax[k], max.(params.xmin[k], params.A[k]*x[k] + g[k] ))
-        v[k] .= project_hyperplane(k, vis, x[k]-g[k], params.A[k], params.xmax[k])
+        # v[k] .= min.(params.xmax[k], max.(params.xmin[k], x[k] + g[k]))
+        v[k] .= project_hyperplane(k, vis, x[k] + g[k], params.A[k], params.xmax[k])
     end
     # display(xmax[1][1])
 end
@@ -80,15 +80,9 @@ function update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k] # original R
-        q[k] .= -ρ*g[k]*10 - params.Q*params.Xref[k]
-        # q[k] .= -ρ*(v[k]-g[k]) - params.Q*params.Xref[k]
-        # q[k] .= -(v[k] - params.Q*params.Xref[k])
+        q[k] .=  -params.Q*(params.Xref[k] - g[k])
     end
-    display(g[params.N])
-    # p[params.N] .= -v[params.N] + ρ*g[params.N] - params.cache.Pinf*params.Xref[params.N]
-    # p[params.N] .= -ρ*(v[params.N]-g[params.N]) + params.cache.Pinf*params.Xref[params.N]
-    # p[params.N] .= -params.cache.Pinf*params.Xref[params.N]
-    p[params.N] .= -ρ*g[params.N]*10 - params.cache.Pinf*params.Xref[params.N]
+    p[params.N] .= -params.cache.Pinf*(params.Xref[params.N] - g[params.N])
 end
 
 #Main algorithm loop
