@@ -34,8 +34,8 @@ function project_hyperplane(k, vis, x, A, b)
     if a'*x_xy - b <= 0
         return x
     else
-        # x_xy_new = [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]/(a[1]^2+a[2]^2) * (x_xy-q) + q
-        denom = a'*a
+        # denom = a'*a
+        denom = 1 # Normalize in update loop
         x_xy_new = [a[1]; a[2]]*b/denom + [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]*x_xy/denom
 
         if k == -1
@@ -115,7 +115,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
         
         primal_residual = maximum(abs.(hcat(u...) - hcat(znew...)))
         dual_residual_input = maximum(abs.(ρ*(hcat(znew...) - hcat(z...))))
-        # dual_residual_state = maximum(abs.(ρ*(hcat(vnew...) - hcat(v...))))
+        dual_residual_state = maximum(abs.(ρ*(hcat(vnew...) - hcat(v...))))
 
         
         z = deepcopy(znew)
@@ -123,7 +123,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
 
         
         if (primal_residual < abs_tol && 
-            dual_residual_input < abs_tol) # &&
+            dual_residual_input < abs_tol)# &&
             # dual_residual_state < abs_tol)
             status = 1
             break
