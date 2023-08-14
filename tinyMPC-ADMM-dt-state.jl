@@ -32,11 +32,18 @@ function project_hyperplane(k, vis, x, A, b)
     a = A[1:3]
     x_xyz = x[1:3]
     if a'*x_xyz - b <= 0
+        # delete!(vis["z_location"])
+        # delete!(vis["z_proj_location"])
+        # setobject!(vis["z_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
+        #     LineBasicMaterial(color=Colors.RGBA(0,0,1)))
+        # setobject!(vis["z_proj_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
+        #     LineBasicMaterial(color=Colors.RGBA(1,0,0)))
         return x
     else
         # denom = a'*a
         denom = 1 # Normalize in update loop
-        x_xyz_new = [a[1]; a[2]]*b/denom + [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]*x_xyz/denom
+        # x_xyz_new = [a[1]; a[2]]*b/denom + [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]*x_xyz/denom
+        x_xyz_new = x_xyz - (a'*x_xyz - b)*a
 
         if k == -1
             # display(a'*x_xy_new - a'*q)
@@ -45,13 +52,13 @@ function project_hyperplane(k, vis, x, A, b)
             # Visualize solution
             delete!(vis["z_location"])
             delete!(vis["z_proj_location"])
-            setobject!(vis["z_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], x_xyz[3]), .02),
+            setobject!(vis["z_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
                 LineBasicMaterial(color=Colors.RGBA(0,0,1)))
-            setobject!(vis["z_proj_location"], HyperSphere(Point{3, Float64}(x_xyz_new[1], x_xyz_new[2], x_xyz_new[3]), .02),
+            setobject!(vis["z_proj_location"], HyperSphere(Point{3, Float64}(x_xyz_new[1], x_xyz_new[2], 0.5), .02),
                 LineBasicMaterial(color=Colors.RGBA(1,0,0)))
         end
 
-        return [x_xyz_new; x[3:end]]
+        return [x_xyz_new; x[4:end]]
     end
 end
 
