@@ -93,7 +93,6 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
     update_dual!(x, v, g, u, z, y, params)
     update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
     for k = 1:max_iter
-    # for k = 1:1
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
 
@@ -155,19 +154,4 @@ function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
     # convert a vector of vectors to a matrix 
     Xm = hcat(X...)
     return Xm 
-end
-
-function export_mat_to_c(declare, data)
-    str = "sfloat" * declare * "= {\n"
-    dataT = data'
-    for i = 1:size(dataT, 1)
-        str = str * "  "
-        for j = 1:size(dataT, 2)
-            this_str = @sprintf("%.6f", dataT[i, j])
-            str = str * this_str * "f,"
-        end
-        str = str * "\n"
-    end
-    str = str * "};"
-    return str
 end
