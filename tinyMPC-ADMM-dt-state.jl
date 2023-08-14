@@ -126,12 +126,12 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
             if dual_residual_input > abs_tol/100
                 ρ_scale = sqrt( (max(primal_residual, primal_residual_state)/max(norm(u, Inf), norm(znew, Inf))) / (dual_residual_input/max(norm(znew, Inf), norm(z, Inf))) )
                 if ρ_scale >= 5
-                    ρ_increase = ceil(Int, log(5, ρ_scale))
+                    ρ_increase = floor(Int, log(5, ρ_scale))
                     ρ_choose = params.ρ_index[1]
                     ρ_choose = max(params.ρ_index[1], min(ρ_choose + ρ_increase, length(params.cache.ρ_list)))
-                    if ρ_choose != params.ρ_index[1]
-                        display("updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
-                    end
+                    # if ρ_choose != params.ρ_index[1]
+                    #     display("updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
+                    # end
                     params.ρ_index .= ρ_choose
                 # elseif iter >= max_iter/length(params.cache.ρ_list)*params.ρ_index[1]
                 #     ρ_choose = params.ρ_index[1]
