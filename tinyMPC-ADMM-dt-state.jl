@@ -4,21 +4,19 @@ using GeometryBasics: HyperSphere
 function backward_pass_grad!(q, r, p, d, params)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     cache = params.cache
+    ρ_k = params.ρ_index[1]
     for k = (params.N-1):-1:1
-        # display("short")
-        d[k] .= cache.Quu_inv*(cache.B̃'*p[k+1] + r[k])
-        p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
-        # p[k] .= q[k] + cache.Ã'*cache.Pinf*cache.B̃*d[k] - cache.Ã'*p[k+1]
-        # display(q[k])
-        # display(p[k])
+        d[k] .= cache.Quu_inv_list[ρ_k]*(cache.B'*p[k+1] + r[k])
+        p[k] .= q[k] + cache.AmBKt_list[ρ_k]*p[k+1] - cache.Kinf_list[ρ_k]'*r[k] + cache.coeff_d2p_list[ρ_k]*d[k]
     end
 end
 
 function forward_pass!(d, x, u, params)
     cache = params.cache
+    ρ_k = params.ρ_index[1]
     for k = 1:(params.N-1)
-        u[k] .= -cache.Kinf*x[k] - d[k] 
-        x[k+1] .= cache.Ã*x[k] + cache.B̃*u[k]
+        u[k] .= -cache.Kinf_list[ρ_k]*x[k] - d[k] 
+        x[k+1] .= cache.A*x[k] + cache.B*u[k]
     end
 end
 
@@ -32,24 +30,12 @@ function project_hyperplane(k, vis, x, A, b)
     a = A[1:3]
     x_xyz = x[1:3]
     if a'*x_xyz - b <= 0
-        # delete!(vis["z_location"])
-        # delete!(vis["z_proj_location"])
-        # setobject!(vis["z_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
-        #     LineBasicMaterial(color=Colors.RGBA(0,0,1)))
-        # setobject!(vis["z_proj_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
-        #     LineBasicMaterial(color=Colors.RGBA(1,0,0)))
         return x
     else
-        # denom = a'*a
         denom = 1 # Normalize in update loop
-        # x_xyz_new = [a[1]; a[2]]*b/denom + [a[2]^2 -a[1]*a[2]; -a[1]*a[2] a[1]^2]*x_xyz/denom
         x_xyz_new = x_xyz - (a'*x_xyz - b)*a
 
         if k == -1
-            # display(a'*x_xy_new - a'*q)
-
-            # sleep(.1)
-            # Visualize solution
             delete!(vis["z_location"])
             delete!(vis["z_proj_location"])
             setobject!(vis["z_location"], HyperSphere(Point{3, Float64}(x_xyz[1], x_xyz[2], 0.5), .02),
@@ -65,13 +51,11 @@ end
 function update_slack!(vis, x, v, g, u, z, y, params)
     #This function clamps the controls to be within the bounds
     for k = 1:(params.N-1)
-        z[k] .= min.(params.umax, max.(params.umin, u[k] + y[k])) # TODO: convert u[k] + y[k] to params.A*u[k] + params.b + y[k] or combine into one slack and dual update
+        z[k] .= min.(params.umax, max.(params.umin, u[k] + y[k]))
     end
     for k = 1:params.N
-        # v[k] .= min.(params.xmax[k], max.(params.xmin[k], x[k] + g[k]))
-        v[k] .= project_hyperplane(k, vis, x[k] + g[k], params.A[k], params.xmax[k][1])
+        v[k] .= project_hyperplane(k, vis, x[k] + g[k], params.constraint_A[k], params.xmax[k][1])
     end
-    # display(xmax[1][1])
 end
 
 function update_dual!(x, v, g, u, z, y, params)
@@ -87,15 +71,16 @@ end
 
 function update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
+    ρ_k = params.ρ_index[1]
     for k = 1:(params.N-1)
-        r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k] # original R
+        r[k] .= -params.cache.ρ_list[ρ_k]*(z[k]-y[k]) - params.R*params.Uref[k] # original R
         q[k] .=  -params.Q*(params.Xref[k] - g[k])
     end
-    p[params.N] .= -params.cache.Pinf*(params.Xref[params.N] - g[params.N])
+    p[params.N] .= -params.cache.Pinf_list[ρ_k]*(params.Xref[params.N] - g[params.N])
 end
 
 #Main algorithm loop
-function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, abs_tol=1e-2, max_iter=200)
+function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e-2, max_iter=200, iters_check_rho_update=1)
 
     primal_residual = 1.0
     dual_residual_input = 1.0
@@ -121,8 +106,9 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
         update_linear_cost!(vnew, g, znew, y, p, q, r, ρ, params)
         
         primal_residual = maximum(abs.(hcat(u...) - hcat(znew...)))
-        dual_residual_input = maximum(abs.(ρ*(hcat(znew...) - hcat(z...))))
-        dual_residual_state = maximum(abs.(ρ*(hcat(vnew...) - hcat(v...))))
+        primal_residual_state = maximum(abs.(hcat(x...) - hcat(vnew...)))
+        dual_residual_input = maximum(abs.(params.cache.ρ_list[params.ρ_index[1]]*(hcat(znew...) - hcat(z...))))
+        dual_residual_state = maximum(abs.(hcat(vnew...) - hcat(v...)))
 
         
         z = deepcopy(znew)
@@ -136,12 +122,33 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
             break
         end
 
-        iter += 1
+        if k % iters_check_rho_update == 0
+            if dual_residual_input > abs_tol/100
+                ρ_scale = sqrt( (max(primal_residual, primal_residual_state)/max(norm(u, Inf), norm(znew, Inf))) / (dual_residual_input/max(norm(znew, Inf), norm(z, Inf))) )
+                if ρ_scale >= 5
+                    ρ_increase = ceil(Int, log(5, ρ_scale))
+                    ρ_choose = params.ρ_index[1]
+                    ρ_choose = max(params.ρ_index[1], min(ρ_choose + ρ_increase, length(params.cache.ρ_list)))
+                    if ρ_choose != params.ρ_index[1]
+                        display("updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
+                    end
+                    params.ρ_index .= ρ_choose
+                # elseif iter >= max_iter/length(params.cache.ρ_list)*params.ρ_index[1]
+                #     ρ_choose = params.ρ_index[1]
+                #     ρ_choose = max(params.ρ_index[1], min(ρ_choose+1, length(params.cache.ρ_list)))
+                #     if ρ_choose != params.ρ_index
+                #         display("iter >= section: updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
+                #     end
+                #     params.ρ_index .= ρ_choose
+                end
+            end
+        end
 
+        iter += 1
 
     end
 
-    return u, status, iter
+    return z, status, iter
 end
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
