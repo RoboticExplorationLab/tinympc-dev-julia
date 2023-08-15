@@ -69,14 +69,16 @@ function update_dual!(x, v, g, u, z, y, params)
     end
 end
 
-function update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
+function update_linear_cost!(v, g, z, y, p, q, r, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     ρ_k = params.ρ_index[1]
     for k = 1:(params.N-1)
-        r[k] .= -params.cache.ρ_list[ρ_k]*(z[k]-y[k]) - params.R*params.Uref[k] # original R
-        q[k] .=  -params.Q*(params.Xref[k] - g[k])
+        r[k] .= -params.cache.ρ_list[ρ_k][1]*(z[k] - y[k]) - params.R*params.Uref[k] # original R
+        # q[k] .=  -params.Q*(params.Xref[k] - g[k])
+        # q[k] .= -params.Q*params.Xref[k] + g[k] - params.cache.ρ_list[ρ_k][1]*v[k]
+        q[k] .= -params.cache.ρ_list[ρ_k][1]*(v[k] - g[k]) - params.Q*params.Xref[k] 
     end
-    p[params.N] .= -params.cache.Pinf_list[ρ_k]*(params.Xref[params.N] - g[params.N])
+    p[params.N] .= -params.cache.ρ_list[ρ_k][1]*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
 end
 
 #Main algorithm loop
@@ -91,7 +93,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
     forward_pass!(d, x, u, params)
     update_slack!(vis, x, v, g, u, z, y, params)
     update_dual!(x, v, g, u, z, y, params)
-    update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
+    update_linear_cost!(v, g, z, y, p, q, r, params)
     for k = 1:max_iter
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
@@ -102,11 +104,11 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
         #Dual ascent
         update_dual!(x, vnew, g, u, znew, y, params)
 
-        update_linear_cost!(vnew, g, znew, y, p, q, r, ρ, params)
+        update_linear_cost!(vnew, g, znew, y, p, q, r, params)
         
         primal_residual = maximum(abs.(hcat(u...) - hcat(znew...)))
         primal_residual_state = maximum(abs.(hcat(x...) - hcat(vnew...)))
-        dual_residual_input = maximum(abs.(params.cache.ρ_list[params.ρ_index[1]]*(hcat(znew...) - hcat(z...))))
+        dual_residual_input = maximum(abs.(params.cache.ρ_list[params.ρ_index[1]][1]*(hcat(znew...) - hcat(z...))))
         dual_residual_state = maximum(abs.(hcat(vnew...) - hcat(v...)))
 
         
@@ -115,8 +117,8 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
 
         
         if (primal_residual < abs_tol && 
-            dual_residual_input < abs_tol)# &&
-            # dual_residual_state < abs_tol)
+            dual_residual_input < abs_tol &&
+            dual_residual_state < abs_tol)
             status = 1
             break
         end
