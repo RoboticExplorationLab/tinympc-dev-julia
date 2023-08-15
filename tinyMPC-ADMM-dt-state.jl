@@ -74,8 +74,6 @@ function update_linear_cost!(v, g, z, y, p, q, r, params)
     ρ_k = params.ρ_index[1]
     for k = 1:(params.N-1)
         r[k] .= -params.cache.ρ_list[ρ_k][1]*(z[k] - y[k]) - params.R*params.Uref[k] # original R
-        # q[k] .=  -params.Q*(params.Xref[k] - g[k])
-        # q[k] .= -params.Q*params.Xref[k] + g[k] - params.cache.ρ_list[ρ_k][1]*v[k]
         q[k] .= -params.cache.ρ_list[ρ_k][1]*(v[k] - g[k]) - params.Q*params.Xref[k] 
     end
     p[params.N] .= -params.cache.ρ_list[ρ_k][1]*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
@@ -85,6 +83,7 @@ end
 function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e-2, max_iter=200, iters_check_rho_update=1)
 
     primal_residual = 1.0
+    primal_residual_state = 1.0
     dual_residual_input = 1.0
     dual_residual_state = 1.0
     status = 0
@@ -109,7 +108,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
         primal_residual = maximum(abs.(hcat(u...) - hcat(znew...)))
         primal_residual_state = maximum(abs.(hcat(x...) - hcat(vnew...)))
         dual_residual_input = maximum(abs.(params.cache.ρ_list[params.ρ_index[1]][1]*(hcat(znew...) - hcat(z...))))
-        dual_residual_state = maximum(abs.(hcat(vnew...) - hcat(v...)))
+        dual_residual_state = maximum(abs.(params.cache.ρ_list[params.ρ_index[1]][1]*(hcat(vnew...) - hcat(v...))))
 
         
         z = deepcopy(znew)
@@ -117,6 +116,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
 
         
         if (primal_residual < abs_tol && 
+            primal_residual_state < abs_tol &&
             dual_residual_input < abs_tol &&
             dual_residual_state < abs_tol)
             status = 1
@@ -134,13 +134,6 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
                     #     display("updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
                     # end
                     params.ρ_index .= ρ_choose
-                # elseif iter >= max_iter/length(params.cache.ρ_list)*params.ρ_index[1]
-                #     ρ_choose = params.ρ_index[1]
-                #     ρ_choose = max(params.ρ_index[1], min(ρ_choose+1, length(params.cache.ρ_list)))
-                #     if ρ_choose != params.ρ_index
-                #         display("iter >= section: updating ρ from " * string(params.cache.ρ_list[params.ρ_index[1]][1][1]) * " to " * string(params.cache.ρ_list[ρ_choose][1][1]))
-                #     end
-                #     params.ρ_index .= ρ_choose
                 end
             end
         end
@@ -150,10 +143,4 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
     end
 
     return z, status, iter
-end
-
-function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
-    # convert a vector of vectors to a matrix 
-    Xm = hcat(X...)
-    return Xm 
 end
