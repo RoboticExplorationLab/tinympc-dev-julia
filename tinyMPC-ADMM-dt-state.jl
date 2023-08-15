@@ -82,7 +82,9 @@ function update_linear_cost!(v, g, z, y, p, q, r, ρ, params)
         r[k] .= -ρ*(z[k]-y[k]) - params.R*params.Uref[k] # original R
         q[k] .= -ρ*(v[k]-g[k]) - params.Q*params.Xref[k]
     end
-    p[params.N] .= -params.cache.Pinf*(params.Xref[params.N] - g[params.N])
+    # q[params.N] .= -params.Q*(params.Xref[params.N] - g[params.N])
+    q[params.N] .= -ρ*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
+    p[params.N] .= q[params.N]
 end
 
 #Main algorithm loop
@@ -130,7 +132,9 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
         iter += 1
 
 
+
     end
+    @show iter
 
     return u, status, iter
 end
