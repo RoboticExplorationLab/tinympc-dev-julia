@@ -15,7 +15,7 @@ function forward_pass!(d, x, u, params)
     cache = params.cache
     ρ_k = params.ρ_index[1]
     for k = 1:(params.N-1)
-        u[k] .= -cache.Kinf_list[ρ_k]*x[k] - d[k] 
+        u[k] .= -cache.Kinf_list[ρ_k]*x[k] - d[k]
         x[k+1] .= cache.A*x[k] + cache.B*u[k]
     end
 end
@@ -122,6 +122,12 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
             status = 1
             break
         end
+
+        println(primal_residual_state)
+        println(dual_residual_state)
+        println(primal_residual)
+        println(dual_residual_input)
+        println()
 
         if k % iters_check_rho_update == 0
             if dual_residual_input > abs_tol/100
