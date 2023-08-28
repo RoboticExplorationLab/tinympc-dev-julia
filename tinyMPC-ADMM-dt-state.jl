@@ -72,12 +72,12 @@ end
 function update_linear_cost!(v, g, z, y, p, q, r, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     ρ_k = params.ρ_index[k]
+    ρ = params.cache.ρ_list[ρ_k][1]
     for k = 1:(params.N-1)
-        ρ = params.cache.ρ_list[ρ_k][1]
         r[k] .= -ρ*(z[k] - y[k]) - (params.R)*params.Uref[k] # original R
         q[k] .= -ρ*(v[k] - g[k]) - (params.Q)*params.Xref[k] 
     end
-    p[params.N] .= -params.cache.ρ_list[ρ_k][1]*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
+    p[params.N] .= -ρ*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
 end
 
 #Main algorithm loop
