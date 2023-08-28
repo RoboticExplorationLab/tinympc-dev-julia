@@ -123,11 +123,11 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
             break
         end
 
-        println(primal_residual_state)
-        println(dual_residual_state)
-        println(primal_residual)
-        println(dual_residual_input)
-        println()
+        # println(primal_residual_state)
+        # println(dual_residual_state)
+        # println(primal_residual)
+        # println(dual_residual_input)
+        # println()
 
         if k % iters_check_rho_update == 0
             if dual_residual_input > abs_tol/100
