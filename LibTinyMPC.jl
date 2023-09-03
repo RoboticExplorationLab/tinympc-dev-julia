@@ -7,7 +7,7 @@ function backward_pass!(Q,R,P,params,adaptive_step)
         P[N] .= cache.Pinf2
         A = 1*Ã
         B = 1*B̃
-        cache.Quu_inv .= (R + B'*P[N]*B)\I
+        cache.Quu_inv .= (R + B'*P[N]*B)\I0
         cache.Kinf .=  cache.Quu_inv*(B'*P[N]*A)
         cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
         
@@ -59,10 +59,6 @@ end
 
 function project_hyperplane(k, vis, x, a, b)
     x_xyz = x[1:3]
-    # print(size(a))
-    # print(size(x_xyz))
-    # print(size(b))
-    # print(a'*x_xyz)
     if a'*x_xyz - b <= 0
         return x
     else
