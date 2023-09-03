@@ -57,9 +57,12 @@ function update_primal!(q,r,p,d,x,u,params,adaptive_step)
     forward_pass!(d,x,u,params,adaptive_step)
 end
 
-function project_hyperplane(k, vis, x, A, b)
-    a = A[1:3]
+function project_hyperplane(k, vis, x, a, b)
     x_xyz = x[1:3]
+    # print(size(a))
+    # print(size(x_xyz))
+    # print(size(b))
+    # print(a'*x_xyz)
     if a'*x_xyz - b <= 0
         return x
     else
@@ -73,14 +76,13 @@ function update_slack!(x,zx,yx,u,zu,yu,params)
     N = params.N 
     umax = params.u_max
     umin = params.u_min
-    xmax = params.x_max
-    xmin = params.x_min
     #This function clamps the controls to be within the bounds
     for k = 1:(N-1)
         zu[k] .= min.(umax, max.(umin, u[k]+yu[k]))
-        zx[k] .= min.(xmax, max.(xmin, x[k]+yx[k]))
+        # zx[k] .= min.(xmax, max.(xmin, x[k]+yx[k]))  # box
+        zx[k] .= project_hyperplane(0, 0, yx[k] + x[k], params.Acx, params.bcx)  # half-space 
     end
-    zx[N] .= min.(xmax, max.(xmin, x[N]+yx[N]))
+    zx[N] .= project_hyperplane(0, 0, yx[N] + x[N], params.Acx, params.bcx)  
 end
 
 function update_dual!(x,zx,yx,u,zu,yu)
