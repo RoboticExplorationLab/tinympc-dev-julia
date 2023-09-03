@@ -71,13 +71,14 @@ end
 
 function update_linear_cost!(v, g, z, y, p, q, r, params)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
-    ρ_k = params.ρ_index[k]
+    ρ_k = params.ρ_index[1]
     ρ = params.cache.ρ_list[ρ_k][1]
     for k = 1:(params.N-1)
         r[k] .= -ρ*(z[k] - y[k]) - (params.R)*params.Uref[k] # original R
         q[k] .= -ρ*(v[k] - g[k]) - (params.Q)*params.Xref[k] 
     end
-    p[params.N] .= -ρ*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
+    # p[params.N] .= -ρ*(v[params.N] - g[params.N]) - params.Qf*params.Xref[params.N]
+    p[params.N] .= -ρ*(v[params.N] - g[params.N]) - cache.Pinf_list[ρ_k]*params.Xref[params.N]
 end
 
 #Main algorithm loop
@@ -91,12 +92,19 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
     iter = 1
 
     forward_pass!(d, x, u, params)
-    update_slack!(vis, x, v, g, u, z, y, params)
-    update_dual!(x, v, g, u, z, y, params)
-    update_linear_cost!(v, g, z, y, p, q, r, params)
+    update_slack!(vis, x, vnew, g, u, znew, y, params)
+    update_dual!(x, vnew, g, u, znew, y, params)
+    update_linear_cost!(vnew, g, znew, y, p, q, r, params)
     for k = 1:max_iter
+    # for k = 1:1
         #Solver linear system with Riccati
         update_primal!(q, r, p, d, x, u, params)
+        # backward_pass_grad!(q, r, p, d, params)
+        # display(d)
+        # display(p)
+        # forward_pass!(d, x, u, params);
+        # display(u)
+        # display(x)
 
         #Project z into feasible domain
         update_slack!(vis, x, vnew, g, u, znew, y, params)
@@ -124,11 +132,11 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
             break
         end
 
-        println(primal_residual_state)
-        println(dual_residual_state)
-        println(primal_residual)
-        println(dual_residual_input)
-        println()
+        # println(primal_residual_state)
+        # println(dual_residual_state)
+        # println(primal_residual)
+        # println(dual_residual_input)
+        # println()
 
         if k % iters_check_rho_update == 0
             if dual_residual_input > abs_tol/100
