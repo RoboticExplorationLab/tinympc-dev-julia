@@ -106,7 +106,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
         update_primal!(q, r, p, d, x, u, params)
 
         #Project z into feasible domain
-        update_slack!(vis, x, vnew, g, u, znew, y, params)
+        # update_slack!(vis, x, vnew, g, u, znew, y, params)
 
         #Dual ascent
         update_dual!(x, vnew, g, u, znew, y, params)
@@ -135,7 +135,7 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; ρ=1.0, ab
 
     end
     @show iter
-
+    @show u
     return u, status, iter
 end
 
