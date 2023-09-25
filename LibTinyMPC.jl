@@ -76,9 +76,9 @@ function update_slack!(x,zx,yx,u,zu,yu,params)
     for k = 1:(N-1)
         zu[k] .= min.(umax, max.(umin, u[k]+yu[k]))
         # zx[k] .= min.(xmax, max.(xmin, x[k]+yx[k]))  # box
-        zx[k] .= project_hyperplane(0, 0, yx[k] + x[k], params.Acx, params.bcx)  # half-space 
+        zx[k] .= project_hyperplane(0, 0, yx[k] + x[k], params.Acx[k], params.bcx[k])  # half-space 
     end
-    zx[N] .= project_hyperplane(0, 0, yx[N] + x[N], params.Acx, params.bcx)  
+    zx[N] .= project_hyperplane(0, 0, yx[N] + x[N], params.Acx[N], params.bcx[N])  
 end
 
 function update_dual!(x,zx,yx,u,zu,yu)
