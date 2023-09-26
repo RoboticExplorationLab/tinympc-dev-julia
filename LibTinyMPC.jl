@@ -93,6 +93,8 @@ function update_slack!(x,zx,yx,u,zu,yu,params)
     umin = params.u_min
     #This function clamps the controls to be within the bounds
     for k = 1:(N-1)
+        zu[k] = u[k]+yu[k]
+        zx[k] = x[k]+yx[k]
         if params.en_box_input == 1
          zu[k] .= min.(umax, max.(umin, u[k]+yu[k]))
         end
@@ -110,6 +112,7 @@ function update_slack!(x,zx,yx,u,zu,yu,params)
         end        
     end
 
+    zx[N] = x[N]+yx[N]
     if params.en_box_state == 1
         zx[N] .= min.(xmax, max.(xmin, x[N]+yx[N]))  # box
     end
