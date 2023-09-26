@@ -68,17 +68,60 @@ function project_hyperplane(k, vis, x, a, b)
     end
 end
 
+function project_soc(x, mu)
+    n = 3 #length(x)
+    s = x[n] * mu
+    # display(x[1:3])
+    # print(x[1:3])
+    v = view(x,1:n-1)
+    a = norm(v)
+    if a <= -s  # below the cone
+        # print("below")
+        return [zeros(n); x[n+1:end]]
+    elseif a <= s  # in the code
+        return x
+    elseif a >= abs(s)  # outside the cone
+        # print("outside")
+        # print(size([0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] ))
+        return [0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] 
+    end
+end
+
 function update_slack!(x,zx,yx,u,zu,yu,params)
     N = params.N 
     umax = params.u_max
     umin = params.u_min
     #This function clamps the controls to be within the bounds
     for k = 1:(N-1)
-        zu[k] .= min.(umax, max.(umin, u[k]+yu[k]))
-        # zx[k] .= min.(xmax, max.(xmin, x[k]+yx[k]))  # box
-        zx[k] .= project_hyperplane(0, 0, yx[k] + x[k], params.Acx[k], params.bcx[k])  # half-space 
+        if params.en_box_input == 1
+         zu[k] .= min.(umax, max.(umin, u[k]+yu[k]))
+        end
+
+        if params.en_box_state == 1
+            zx[k] .= min.(xmax, max.(xmin, x[k]+yx[k]))  # box
+        end
+        
+        if params.en_soc_state == 1
+            zx[k] .= project_soc(yx[k] + x[k], params.mu)  # soc
+        end
+
+        if params.en_hplane_state == 1
+            zx[k] .= project_hyperplane(0, 0, yx[k] + x[k], params.Acx[k], params.bcx[k])  # half-space 
+        end        
     end
-    zx[N] .= project_hyperplane(0, 0, yx[N] + x[N], params.Acx[N], params.bcx[N])  
+
+    if params.en_box_state == 1
+        zx[N] .= min.(xmax, max.(xmin, x[N]+yx[N]))  # box
+    end
+
+    if params.en_soc_state == 1
+        zx[N] .= project_soc(x[N]+yx[N], params.mu)  # soc
+    end
+
+    if params.en_hplane_state == 1
+        zx[N] .= project_hyperplane(0, 0, yx[N] + x[N], params.Acx[N], params.bcx[N])  
+    end
+
 end
 
 function update_dual!(x,zx,yx,u,zu,yu)
