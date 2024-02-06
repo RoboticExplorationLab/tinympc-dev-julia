@@ -122,7 +122,6 @@ function solve_admm!(vis, params, q, r, p, d, x,v,vnew,g, u,z,znew,y; abs_tol=1e
         
         z = deepcopy(znew)
         v = deepcopy(vnew)
-
         
         if (primal_residual < abs_tol && 
             primal_residual_state < abs_tol &&
