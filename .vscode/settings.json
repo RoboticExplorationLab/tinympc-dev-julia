@@ -1,5 +1,6 @@
 {
   "editor.scrollbar.verticalScrollbarSize": 16,
   "ros.distro": "noetic",
-  "cmake.configureOnOpen": false
+  "cmake.configureOnOpen": false,
+  "julia.environmentPath": "/home/khai/SSD/Code/Julia/tinympc-julia"
 }

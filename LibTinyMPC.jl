@@ -18,6 +18,19 @@ function backward_pass!(Q,R,P,params,adaptive_step)
     end    
 end
 
+function backward_pass_aff!(A,B,f,Q,q,R,r,P,p,K,d)
+    #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
+    for k = (N-1):-1:1
+        q[:,k] .= -Q*xref[:,k]
+        K[:,:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*P[:,:,k+1]*A)
+        d[:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*p[:,k+1] + B'*P[:,:,k+1]*f + r[:,k])
+        r[:,k] .= -R*uref[:,k]
+        P[:,:,k] .= Q + 1*K[:,:,k]'*R*K[:,:,k] + (A-1*B*K[:,:,k])'*P[:,:,k+1]*(A-B*K[:,:,k])
+        p[:,k] .= q[:,k] + (A-B*K[:,:,k])'*(p[:,k+1]-P[:,:,k+1]*B*d[:,k]) + K[:,:,k]'*(R*d[:,k]-r[:,k])
+    end
+end
+
+
 function backward_pass_grad!(q,r,p,d,params,adaptive_step)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     N = params.N 
