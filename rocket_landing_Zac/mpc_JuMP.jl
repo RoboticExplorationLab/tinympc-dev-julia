@@ -3,10 +3,12 @@ function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
     Nh = params.N
     nx = params.nx
     nu = params.nu
-    α_max = params.c_cone[3]
-    NN = Nh*nx + (Nh-1)*nu
-    x0 = 1*X[1]
+    α_max = params.c_cone[3]  # Thrust angle constraint
+    NN = Nh*nx + (Nh-1)*nu  # number of decision variables
+    x0 = 1*X[1]  # initial state
     
+    # we compress x and u into one single decision variable z, 
+    # then these are their indices
     inds = reshape(1:(nx+nu)*Nh,nx+nu,Nh)  
     xinds = [z[1:nx] for z in eachcol(inds)]
     uinds = [z[nx+1:end] for z in eachcol(inds)][1:Nh-1]    
@@ -42,7 +44,7 @@ function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
     # Initial condition 
     @constraint(model, z[xinds[1]] .== x0)
     
-    # Thrust angle constraint
+    # Thrust angle constraint (SOC): norm([u1,u2]) <= α_max * u3
     if params.ncu_cone > 0 
       for k = 1:Nh-1
           u1,u2,u3 = z[uinds[k]]
@@ -73,6 +75,8 @@ function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
   
     optimize!(model)   
     # termination_status(model) == INFEASIBLE && print("Other solver says INFEASIBLE\n")
+
+    # get results
     for j = 1:Nh-1
         X[j] .= value.(z[xinds[j]]) 
         U[j] .= value.(z[uinds[j]]) 

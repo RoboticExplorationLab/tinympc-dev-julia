@@ -180,15 +180,21 @@ function update_slack!(solver::TinySolver)
 
     #This function clamps the controls to be within the bounds
     for k = 1:(NHORIZON-1)
+        # compute the updated slack
         bounds.znew[:,k] = work.u[:,k] + bounds.y[:,k]
         bounds.vnew[:,k] = work.x[:,k] + bounds.g[:,k]
-        for cone_i = 1:socs.ncu
-            socs.zcnew[cone_i][:,k]  = work.u[:,k] + socs.yc[cone_i][:,k]
+        if stgs.en_input_soc == 1 && socs.ncu > 0
+            for cone_i = 1:socs.ncu 
+                socs.zcnew[cone_i][:,k]  = work.u[:,k] + socs.yc[cone_i][:,k]
+            end
         end
-        for cone_i = 1:socs.ncx
-            socs.vcnew[cone_i][:,k]  = work.x[:,k] + socs.gc[cone_i][:,k]
+        if stgs.en_state_soc == 1 && socs.ncx > 0
+            for cone_i = 1:socs.ncx
+                socs.vcnew[cone_i][:,k]  = work.x[:,k] + socs.gc[cone_i][:,k]
+            end
         end
 
+        # project the updated slack
         if stgs.en_input_bound == 1
             bounds.znew[:,k] .= min.(umax[:,k], max.(umin[:,k], bounds.znew[:,k]))
         end
@@ -197,23 +203,19 @@ function update_slack!(solver::TinySolver)
             bounds.vnew[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.vnew[:,k]))  # box
         end
         
-        if stgs.en_input_soc == 1
-            if socs.ncu > 0
-                for cone_i = 1:socs.ncu
-                    start = socs.Acu[cone_i]
-                    indexes = start:(start+socs.qcu[cone_i])
-                    socs.zcnew[cone_i][indexes, k] = project_soc(socs.zcnew[cone_i][indexes, k], socs.muu[cone_i], socs.qcu[cone_i])  # soc
-                end
+        if stgs.en_input_soc == 1 && socs.ncu > 0
+            for cone_i = 1:socs.ncu
+                start = socs.Acu[cone_i]
+                indexes = start:(start+socs.qcu[cone_i])
+                socs.zcnew[cone_i][indexes, k] = project_soc(socs.zcnew[cone_i][indexes, k], socs.muu[cone_i], socs.qcu[cone_i])  # soc
             end
         end
 
-        if stgs.en_state_soc == 1
-            if socs.ncx > 0
-                for cone_i = 1:socs.ncx
-                    start = socs.Acx[cone_i]
-                    indexes = start:(start+socs.qcx[cone_i])
-                    socs.vcnew[cone_i][indexes, k] = project_soc(socs.vcnew[cone_i][indexes, k], socs.mux[cone_i], socs.qcx[cone_i])  # soc
-                end
+        if stgs.en_state_soc == 1 && socs.ncx > 0
+            for cone_i = 1:socs.ncx
+                start = socs.Acx[cone_i]
+                indexes = start:(start+socs.qcx[cone_i])
+                socs.vcnew[cone_i][indexes, k] = project_soc(socs.vcnew[cone_i][indexes, k], socs.mux[cone_i], socs.qcx[cone_i])  # soc
             end
         end
 
@@ -222,21 +224,18 @@ function update_slack!(solver::TinySolver)
         # end        
     end
 
+    # update the last step slack
     bounds.vnew[:,NHORIZON] = work.x[:,NHORIZON] + bounds.g[:,NHORIZON]
     if stgs.en_state_bound == 1
         bounds.vnew[:,NHORIZON] .= min.(xmax[:,NHORIZON], max.(xmin[:,NHORIZON], bounds.vnew[:,NHORIZON]))  # box
     end
 
-    for cone_i = 1:socs.ncx
-        socs.vcnew[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
-    end
-    if stgs.en_state_soc == 1
-        if socs.ncx > 0
-            for cone_i = 1:socs.ncx
-                start = socs.Acx[cone_i]
-                indexes = start:(start+socs.qcx[cone_i])
-                socs.vcnew[cone_i][indexes, NHORIZON] = project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.mux[cone_i], socs.qcx[cone_i])  # soc
-            end
+    if stgs.en_state_soc == 1 && socs.ncx > 0
+        for cone_i = 1:socs.ncx
+            socs.vcnew[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+            start = socs.Acx[cone_i]
+            indexes = start:(start+socs.qcx[cone_i])
+            socs.vcnew[cone_i][indexes, NHORIZON] = project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.mux[cone_i], socs.qcx[cone_i])  # soc
         end
     end
 
@@ -254,17 +253,23 @@ function update_dual!(solver::TinySolver)
     for k = 1:(NHORIZON-1)
         bounds.y[:,k] .= bounds.y[:,k] + work.u[:,k] - bounds.znew[:,k]
         bounds.g[:,k] .= bounds.g[:,k] + work.x[:,k] - bounds.vnew[:,k]
-        for cone_i = 1:socs.ncu
-            socs.yc[cone_i][:,k] .= socs.yc[cone_i][:,k] + work.u[:,k] - socs.zcnew[cone_i][:,k]
+        if en_input_soc == 1
+            for cone_i = 1:socs.ncu
+                socs.yc[cone_i][:,k] .= socs.yc[cone_i][:,k] + work.u[:,k] - socs.zcnew[cone_i][:,k]
+            end
         end
-        for cone_i = 1:socs.ncx
-            socs.gc[cone_i][:,k] .= socs.gc[cone_i][:,k] + work.x[:,k] - socs.vcnew[cone_i][:,k]
+        if en_state_soc == 1
+            for cone_i = 1:socs.ncx
+                socs.gc[cone_i][:,k] .= socs.gc[cone_i][:,k] + work.x[:,k] - socs.vcnew[cone_i][:,k]
+            end
         end
     end
 
     bounds.g[:,NHORIZON] .= bounds.g[:,NHORIZON] + work.x[:,NHORIZON] - bounds.vnew[:,NHORIZON]
-    for cone_i = 1:socs.ncx
-        socs.gc[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+    if en_state_soc == 1
+        for cone_i = 1:socs.ncx
+            socs.gc[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+        end
     end
 end
 
@@ -276,12 +281,27 @@ function update_linear_cost!(solver::TinySolver)
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(NHORIZON-1)
         work.r[:,k] = -work.R*work.Uref[:,k] # original R??
-        work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k] + socs.zcnew[:,k]- socs.yc[cone_i][:,k])   
+        work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k])  
+        if en_input_soc == 1                
+            for cone_i = 1:socs.ncu
+                work.r[:,k] -= cache.rho*(socs.zcnew[cone_i][:,k] - socs.yc[cone_i][:,k])
+            end 
+        end
         work.q[:,k] = -work.Q*work.Xref[:,k]
-        work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k] + socs.vcnew[:,k]- socs.gc[cone_i][:,k]) 
+        work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k]) 
+        if en_state_soc == 1
+            for cone_i = 1:socs.ncx
+                work.q[:,k] -= cache.rho*(socs.vcnew[cone_i][:,k] - socs.gc[cone_i][:,k])
+            end
+        end
     end
     work.p[:,NHORIZON] = -cache.Pinf*work.Xref[:,NHORIZON]
-    work.p[:,NHORIZON] -= cache.rho*(bounds.vnew[:,NHORIZON] - bounds.g[:,NHORIZON] + socs.vcnew[:,NHORIZON] - socs.gc[cone_i][:,NHORIZON])
+    work.p[:,NHORIZON] -= cache.rho*(bounds.vnew[:,NHORIZON] - bounds.g[:,NHORIZON])
+    if en_state_soc == 1
+        for cone_i = 1:socs.ncx
+            work.p[:,NHORIZON] -= cache.rho*(socs.vcnew[cone_i][:,NHORIZON] - socs.gc[cone_i][:,NHORIZON])
+        end
+    end
 end
 
 #Main algorithm loop
@@ -290,6 +310,7 @@ function solve_admm!(solver::TinySolver)
     cache = solver.cache
     bounds = work.bounds
     stgs = solver.settings
+    socs = work.socs
 
     # forward_pass!(solver)
     # update_slack!(solver)
@@ -320,11 +341,24 @@ function solve_admm!(solver::TinySolver)
         update_linear_cost!(solver)
         
         work.pri_res_input = maximum(abs.(work.u-bounds.znew))
-        work.pri_res_input = max(work.pri_res_input, maximum(abs.(work.u-socs.zcnew)))
         work.dua_res_input = maximum(abs.(cache.rho*(bounds.znew-bounds.z)))
-        work.dua_res_input = max(work.dua_res_input, maximum(abs.(cache.rho*(socs.zcnew-socs.zc))))
+
+        if en_state_soc == 1 && socs.ncu > 0
+            for cone_i = 1:socs.ncu
+                work.pri_res_input = max(work.pri_res_input, maximum(abs.(work.u-socs.zcnew[cone_i])))
+                work.dua_res_input = max(work.dua_res_input, maximum(abs.(cache.rho*(socs.zcnew[cone_i]-socs.zc[cone_i]))))
+            end
+        end
+
         work.pri_res_state = maximum(abs.(work.x-bounds.vnew))
         work.dua_res_state = maximum(abs.(cache.rho*(bounds.vnew-bounds.v)))
+
+        if en_input_soc == 1 && socs.ncx > 0
+            for cone_i = 1:socs.ncx
+                work.pri_res_state = max(work.pri_res_state, maximum(abs.(work.x-socs.vcnew[cone_i])))
+                work.dua_res_state = max(work.dua_res_state, maximum(abs.(cache.rho*(socs.vcnew[cone_i]-socs.vc[cone_i]))))
+            end
+        end
                 
         bounds.v .= bounds.vnew
         bounds.z .= bounds.znew
