@@ -9,27 +9,12 @@ function backward_pass!(Q,R,P,params,adaptive_step)
         B = 1*B̃
         cache.Quu_inv .= (R + B'*P[N]*B)\I0
         cache.Kinf .=  cache.Quu_inv*(B'*P[N]*A)
-        cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)
-        
+        cache.Pinf .= Q + cache.Kinf'*R*cache.Kinf + (A-B*cache.Kinf)'*P[N]*(A-B*cache.Kinf)        
         cache.AmBKt .= (A-B*cache.Kinf)'
-        cache.coeff_d2p .= cache.Kinf'*R - cache.AmBKt*cache.Pinf*B
     else 
         P[N] .= cache.Pinf
     end    
 end
-
-function backward_pass_aff!(A,B,f,Q,q,R,r,P,p,K,d)
-    #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
-    for k = (N-1):-1:1
-        q[:,k] .= -Q*xref[:,k]
-        K[:,:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*P[:,:,k+1]*A)
-        d[:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*p[:,k+1] + B'*P[:,:,k+1]*f + r[:,k])
-        r[:,k] .= -R*uref[:,k]
-        P[:,:,k] .= Q + 1*K[:,:,k]'*R*K[:,:,k] + (A-1*B*K[:,:,k])'*P[:,:,k+1]*(A-B*K[:,:,k])
-        p[:,k] .= q[:,k] + (A-B*K[:,:,k])'*(p[:,k+1]-P[:,:,k+1]*B*d[:,k]) + K[:,:,k]'*(R*d[:,k]-r[:,k])
-    end
-end
-
 
 function backward_pass_grad!(q,r,p,d,params,adaptive_step)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
@@ -39,12 +24,25 @@ function backward_pass_grad!(q,r,p,d,params,adaptive_step)
         if (adaptive_step > 0 && k > adaptive_step)
             # display("long")
             d[k] .= cache.Quu_inv2*(B̃s'*p[k+1] + r[k])
-            p[k] .= q[k] + cache.AmBKt2*p[k+1] - cache.Kinf2'*r[k] + cache.coeff_d2p2*d[k]
+            p[k] .= q[k] + cache.AmBKt2*p[k+1] - cache.Kinf2'*r[k]
         else
             # display("short")
             d[k] .= cache.Quu_inv*(B̃'*p[k+1] + r[k])
-            p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k] + cache.coeff_d2p*d[k]
+            p[k] .= q[k] + cache.AmBKt*p[k+1] - cache.Kinf'*r[k]
         end
+    end
+end
+
+function backward_pass_grad_aff!(A,B,f,Q,q,R,r,P,p,K,d)
+    #This is the standard Riccati backward pass with both linear and quadratic terms (like iLQR)
+    for k = (N-1):-1:1
+        q[:,k] .= -Q*xref[:,k]
+        K[:,:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*P[:,:,k+1]*A)
+        d[:,k] .= (R + B'*P[:,:,k+1]*B)\(B'*p[:,k+1] + B'*P[:,:,k+1]*f + r[:,k])
+        r[:,k] .= -R*uref[:,k]
+        P[:,:,k] .= Q + 1*K[:,:,k]'*R*K[:,:,k] + (A-1*B*K[:,:,k])'*P[:,:,k+1]*(A-B*K[:,:,k])
+        # p[:,k] .= q[:,k] + (A-B*K[:,:,k])'*(p[:,k+1]-P[:,:,k+1]*B*d[:,k]) + K[:,:,k]'*(R*d[:,k]-r[:,k])
+        p[:,k] .= q[:,k] + (A-B*K[:,:,k])'*p[:,k+1] - K[:,:,k]'*r[:,k] + (A-B*K[:,:,k])'*P[:,:,k+1]*f
     end
 end
 
@@ -82,8 +80,8 @@ function project_hyperplane(k, vis, x, a, b)
 end
 
 function project_soc(x, mu)
-    n = 3 #length(x)
-    s = x[n] * mu
+    n = 3 #length(x) -- size of each cone qc[k]
+    s = x[n] * mu  # ||v|| = ||u[1:n-1]|| <= u[n] * mu = s
     # display(x[1:3])
     # print(x[1:3])
     v = view(x,1:n-1)
