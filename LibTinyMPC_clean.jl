@@ -48,11 +48,11 @@ mutable struct TinySocs
     Acu::Vector{Int}  # start indexes for input cones
     Acx::Vector{Int}  # start indexes for state cones
     zc::Vector{Matrix{Float64}}  # input slack variables
+    zcnew::Vector{Matrix{Float64}}
     vc::Vector{Matrix{Float64}}  # state slack variables
     vcnew::Vector{Matrix{Float64}}  
-    zcnew::Vector{Matrix{Float64}}
-    gc::Vector{Matrix{Float64}}  # state dual variables
     yc::Vector{Matrix{Float64}}  # input dual variables
+    gc::Vector{Matrix{Float64}}  # state dual variables
 end
 
 mutable struct TinyWorkspace
@@ -81,7 +81,7 @@ mutable struct TinyWorkspace
     Qu::Matrix{Float64}
 
     bounds::TinyBounds
-    # socs::TinySocs
+    socs::TinySocs
 end
 
 mutable struct TinySolver
@@ -146,30 +146,32 @@ end
 #     end
 # end
 
-# function project_soc(x, mu)
-#     n = 3 #length(x)
-#     s = x[n] * mu
-#     # display(x[1:3])
-#     # print(x[1:3])
-#     v = view(x,1:n-1)
-#     a = norm(v)
-#     if a <= -s  # below the cone
-#         # print("below")
-#         return [zeros(n); x[n+1:end]]
-#     elseif a <= s  # in the code
-#         return x
-#     elseif a >= abs(s)  # outside the cone
-#         # print("outside")
-#         # print(size([0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] ))
-#         return [0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] 
-#     end
-# end
+function project_soc(s::Matrix{Float64}, mu::Float64, n::Int)::Matrix{Float64}
+    """
+    Project a vector `s` onto the second-order cone defined by `mu` and `n`
+    s is already selected with Ac
+    """
+    u0 = s[n]*mu
+    u1 = view(s,1:n-1)
+    a = norm(u1)
+    if a <= -u0  # below the cone
+        # print("below")
+        return [zeros(n); u0[n+1:end]]
+    elseif a <= u0  # in the code
+        return s
+    elseif a >= abs(u0)  # outside the cone
+        # print("outside")
+        # print(size([0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] ))
+        return [0.5 * (1 + u0/a) * [u1; a/mu]; s[n+1:end]] 
+    end
+end
 
 function update_slack!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     stgs = solver.settings
     bounds = work.bounds
+    socs = work.socs
 
     umax = bounds.umax
     umin = bounds.umin
@@ -178,34 +180,65 @@ function update_slack!(solver::TinySolver)
 
     #This function clamps the controls to be within the bounds
     for k = 1:(NHORIZON-1)
-        bounds.z[:,k] = work.u[:,k]+bounds.y[:,k]
-        bounds.v[:,k] = work.x[:,k]+bounds.g[:,k]
+        bounds.znew[:,k] = work.u[:,k] + bounds.y[:,k]
+        bounds.vnew[:,k] = work.x[:,k] + bounds.g[:,k]
+        for cone_i = 1:socs.ncu
+            socs.zcnew[cone_i][:,k]  = work.u[:,k] + socs.yc[cone_i][:,k]
+        end
+        for cone_i = 1:socs.ncx
+            socs.vcnew[cone_i][:,k]  = work.x[:,k] + socs.gc[cone_i][:,k]
+        end
 
         if stgs.en_input_bound == 1
-            bounds.z[:,k] .= min.(umax[:,k], max.(umin[:,k], bounds.z[:,k]))
+            bounds.znew[:,k] .= min.(umax[:,k], max.(umin[:,k], bounds.znew[:,k]))
         end
 
         if stgs.en_state_bound == 1
-            bounds.v[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.v[:,k]))  # box
+            bounds.vnew[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.vnew[:,k]))  # box
         end
         
-        # if stgs.en_soc_state == 1
-        #     v[k] .= project_soc(g[k] + x[k], stgs.mu)  # soc
-        # end
+        if stgs.en_input_soc == 1
+            if socs.ncu > 0
+                for cone_i = 1:socs.ncu
+                    start = socs.Acu[cone_i]
+                    indexes = start:(start+socs.qcu[cone_i])
+                    socs.zcnew[cone_i][indexes, k] = project_soc(socs.zcnew[cone_i][indexes, k], socs.muu[cone_i], socs.qcu[cone_i])  # soc
+                end
+            end
+        end
+
+        if stgs.en_state_soc == 1
+            if socs.ncx > 0
+                for cone_i = 1:socs.ncx
+                    start = socs.Acx[cone_i]
+                    indexes = start:(start+socs.qcx[cone_i])
+                    socs.vcnew[cone_i][indexes, k] = project_soc(socs.vcnew[cone_i][indexes, k], socs.mux[cone_i], socs.qcx[cone_i])  # soc
+                end
+            end
+        end
 
         # if stgs.en_hplane_state == 1
         #     v[k] .= project_hyperplane(0, 0, g[k] + x[k], stgs.Acx[k], stgs.bcx[k])  # half-space 
         # end        
     end
 
-    bounds.v[:,NHORIZON] = work.x[:,NHORIZON]+bounds.g[:,NHORIZON]
+    bounds.vnew[:,NHORIZON] = work.x[:,NHORIZON] + bounds.g[:,NHORIZON]
     if stgs.en_state_bound == 1
-        bounds.v[:,NHORIZON] .= min.(xmax[:,NHORIZON], max.(xmin[:,NHORIZON], bounds.v[:,NHORIZON]))  # box
+        bounds.vnew[:,NHORIZON] .= min.(xmax[:,NHORIZON], max.(xmin[:,NHORIZON], bounds.vnew[:,NHORIZON]))  # box
     end
 
-    # if stgs.en_soc_state == 1
-    #     v[NHORIZON] .= project_soc(x[NHORIZON]+g[NHORIZON], stgs.mu)  # soc
-    # end
+    for cone_i = 1:socs.ncx
+        socs.vcnew[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+    end
+    if stgs.en_state_soc == 1
+        if socs.ncx > 0
+            for cone_i = 1:socs.ncx
+                start = socs.Acx[cone_i]
+                indexes = start:(start+socs.qcx[cone_i])
+                socs.vcnew[cone_i][indexes, NHORIZON] = project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.mux[cone_i], socs.qcx[cone_i])  # soc
+            end
+        end
+    end
 
     # if stgs.en_hplane_state == 1
     #     v[NHORIZON] .= project_hyperplane(0, 0, g[NHORIZON] + x[NHORIZON], params.Acx[NHORIZON], params.bcx[NHORIZON])  
@@ -215,28 +248,40 @@ end
 function update_dual!(solver::TinySolver)
     work = solver.workspace
     bounds = work.bounds
+    socs = work.socs
     #This function performs the standard AL multiplier update.
     #Note that we're using the "scaled form" where y = λ/ρ
     for k = 1:(NHORIZON-1)
-        bounds.y[:,k] .= bounds.y[:,k] + work.u[:,k] - bounds.z[:,k]
-        bounds.g[:,k] .= bounds.g[:,k] + work.x[:,k] - bounds.v[:,k]
+        bounds.y[:,k] .= bounds.y[:,k] + work.u[:,k] - bounds.znew[:,k]
+        bounds.g[:,k] .= bounds.g[:,k] + work.x[:,k] - bounds.vnew[:,k]
+        for cone_i = 1:socs.ncu
+            socs.yc[cone_i][:,k] .= socs.yc[cone_i][:,k] + work.u[:,k] - socs.zcnew[cone_i][:,k]
+        end
+        for cone_i = 1:socs.ncx
+            socs.gc[cone_i][:,k] .= socs.gc[cone_i][:,k] + work.x[:,k] - socs.vcnew[cone_i][:,k]
+        end
     end
-    bounds.g[:,NHORIZON] .= bounds.g[:,NHORIZON] + work.x[:,NHORIZON] - bounds.v[:,NHORIZON]
+
+    bounds.g[:,NHORIZON] .= bounds.g[:,NHORIZON] + work.x[:,NHORIZON] - bounds.vnew[:,NHORIZON]
+    for cone_i = 1:socs.ncx
+        socs.gc[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+    end
 end
 
 function update_linear_cost!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     bounds = work.bounds
+    socs = work.socs
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(NHORIZON-1)
-        work.r[:,k] = -work.R*work.Uref[:,k] # original R (doesn't matter)
-        work.r[:,k] -= cache.rho*(bounds.z[:,k]-bounds.y[:,k])   
+        work.r[:,k] = -work.R*work.Uref[:,k] # original R??
+        work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k] + socs.zcnew[:,k]- socs.yc[cone_i][:,k])   
         work.q[:,k] = -work.Q*work.Xref[:,k]
-        work.q[:,k] -= cache.rho*(bounds.v[:,k]-bounds.g[:,k]) 
+        work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k] + socs.vcnew[:,k]- socs.gc[cone_i][:,k]) 
     end
     work.p[:,NHORIZON] = -cache.Pinf*work.Xref[:,NHORIZON]
-    work.p[:,NHORIZON] -= cache.rho*(bounds.v[:,NHORIZON]-bounds.g[:,NHORIZON])
+    work.p[:,NHORIZON] -= cache.rho*(bounds.vnew[:,NHORIZON] - bounds.g[:,NHORIZON] + socs.vcnew[:,NHORIZON] - socs.gc[cone_i][:,NHORIZON])
 end
 
 #Main algorithm loop
@@ -246,10 +291,15 @@ function solve_admm!(solver::TinySolver)
     bounds = work.bounds
     stgs = solver.settings
 
-    # forward_pass!(K,d,x,u,params,adaptive_step)
-    # update_slack!(u,z,y,params)
-    # update_dual!(u,z,y)
-    update_linear_cost!(solver)
+    # forward_pass!(solver)
+    # update_slack!(solver)
+    # update_dual!(solver)
+    # update_linear_cost!(solver)
+
+    # bounds.v .= bounds.vnew
+    # bounds.z .= bounds.znew
+    # socs.vc .= socs.vcnew
+    # socs.zc .= socs.zcnew
 
     work.pri_res_input = 1.0
     work.dua_res_input = 1.0
@@ -259,23 +309,27 @@ function solve_admm!(solver::TinySolver)
     work.iter = 0
     for k = 1:stgs.max_iter
         #Solver linear system with Riccati
-        update_primal!(solver::TinySolver)
+        update_primal!(solver)
 
         #Project z into feasible domain
-        update_slack!(solver::TinySolver)
+        update_slack!(solver)
 
         #Dual ascent
-        update_dual!(solver::TinySolver)
+        update_dual!(solver)
 
-        update_linear_cost!(solver::TinySolver)
+        update_linear_cost!(solver)
         
         work.pri_res_input = maximum(abs.(work.u-bounds.znew))
+        work.pri_res_input = max(work.pri_res_input, maximum(abs.(work.u-socs.zcnew)))
         work.dua_res_input = maximum(abs.(cache.rho*(bounds.znew-bounds.z)))
+        work.dua_res_input = max(work.dua_res_input, maximum(abs.(cache.rho*(socs.zcnew-socs.zc))))
         work.pri_res_state = maximum(abs.(work.x-bounds.vnew))
         work.dua_res_state = maximum(abs.(cache.rho*(bounds.vnew-bounds.v)))
                 
         bounds.v .= bounds.vnew
         bounds.z .= bounds.znew
+        socs.vc .= socs.vcnew
+        socs.zc .= socs.zcnew
 
         work.iter += 1
         
