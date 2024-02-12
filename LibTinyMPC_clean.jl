@@ -39,12 +39,12 @@ mutable struct TinyBounds
 end
 
 mutable struct TinySocs
-    ncu::Int  # number of input cones (max 2)
-    ncx::Int  # number of state cones (max 2)
-    muu::Vector{Float64}  # coefficients for input cones
-    mux::Vector{Float64}  # coefficients for state cones
-    qcu::Vector{Int}  # dimensions for input cones (2 or 3)
-    qcx::Vector{Int}  # dimensions for state cones (2 or 3)
+    ncu::Int  # number of input cones 
+    ncx::Int  # number of state cones 
+    cu::Vector{Float64}  # coefficients for input cones
+    cx::Vector{Float64}  # coefficients for state cones
+    qcu::Vector{Int}  # dimensions for input cones 
+    qcx::Vector{Int}  # dimensions for state cones 
     Acu::Vector{Int}  # start indexes for input cones
     Acx::Vector{Int}  # start indexes for state cones
     zc::Vector{Matrix{Float64}}  # input slack variables
@@ -146,7 +146,7 @@ end
 #     end
 # end
 
-function project_soc(s::Matrix{Float64}, mu::Float64, n::Int)::Matrix{Float64}
+function project_soc(s::Vector{Float64}, mu::Float64, n::Int)
     """
     Project a vector `s` onto the second-order cone defined by `mu` and `n`
     s is already selected with Ac
@@ -156,13 +156,12 @@ function project_soc(s::Matrix{Float64}, mu::Float64, n::Int)::Matrix{Float64}
     a = norm(u1)
     if a <= -u0  # below the cone
         # print("below")
-        return [zeros(n); u0[n+1:end]]
+        return zeros(n)
     elseif a <= u0  # in the code
-        return s
+        return (s)
     elseif a >= abs(u0)  # outside the cone
         # print("outside")
-        # print(size([0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] ))
-        return [0.5 * (1 + u0/a) * [u1; a/mu]; s[n+1:end]] 
+        return (0.5 * (1 + u0/a) * [u1; a/mu])
     end
 end
 
@@ -206,16 +205,16 @@ function update_slack!(solver::TinySolver)
         if stgs.en_input_soc == 1 && socs.ncu > 0
             for cone_i = 1:socs.ncu
                 start = socs.Acu[cone_i]
-                indexes = start:(start+socs.qcu[cone_i])
-                socs.zcnew[cone_i][indexes, k] = project_soc(socs.zcnew[cone_i][indexes, k], socs.muu[cone_i], socs.qcu[cone_i])  # soc
+                indexes = start:(start+socs.qcu[cone_i]-1)
+                socs.zcnew[cone_i][indexes, k] .= project_soc(socs.zcnew[cone_i][indexes, k], socs.cu[cone_i], socs.qcu[cone_i])  # soc
             end
         end
 
         if stgs.en_state_soc == 1 && socs.ncx > 0
             for cone_i = 1:socs.ncx
                 start = socs.Acx[cone_i]
-                indexes = start:(start+socs.qcx[cone_i])
-                socs.vcnew[cone_i][indexes, k] = project_soc(socs.vcnew[cone_i][indexes, k], socs.mux[cone_i], socs.qcx[cone_i])  # soc
+                indexes = start:(start+socs.qcx[cone_i]-1)
+                socs.vcnew[cone_i][indexes, k] .= project_soc(socs.vcnew[cone_i][indexes, k], socs.cx[cone_i], socs.qcx[cone_i])  # soc
             end
         end
 
@@ -234,8 +233,8 @@ function update_slack!(solver::TinySolver)
         for cone_i = 1:socs.ncx
             socs.vcnew[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
             start = socs.Acx[cone_i]
-            indexes = start:(start+socs.qcx[cone_i])
-            socs.vcnew[cone_i][indexes, NHORIZON] = project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.mux[cone_i], socs.qcx[cone_i])  # soc
+            indexes = start:(start+socs.qcx[cone_i]-1)
+            socs.vcnew[cone_i][indexes, NHORIZON] .= project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.cx[cone_i], socs.qcx[cone_i])  # soc
         end
     end
 
