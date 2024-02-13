@@ -199,11 +199,11 @@ function update_slack!(solver::TinySolver)
         end
 
         if stgs.en_state_bound == 1
-            bounds.vnew[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.vnew[:,k]))  # box
+            bounds.vnew[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.vnew[:,k]))
+            # display(bounds.vnew[:,k])
         end
         
         if stgs.en_input_soc == 1 && socs.ncu > 0
-            # print("input soc")
             for cone_i = 1:socs.ncu
                 start = socs.Acu[cone_i]
                 indexes = start:(start+socs.qcu[cone_i]-1)
@@ -227,7 +227,6 @@ function update_slack!(solver::TinySolver)
     # update the last step slack
     bounds.vnew[:,NHORIZON] = work.x[:,NHORIZON] + bounds.g[:,NHORIZON]
     if stgs.en_state_bound == 1
-        print("state bound")
         bounds.vnew[:,NHORIZON] .= min.(xmax[:,NHORIZON], max.(xmin[:,NHORIZON], bounds.vnew[:,NHORIZON]))  # box
     end
 
@@ -289,7 +288,7 @@ function update_linear_cost!(solver::TinySolver)
             end 
         end
         work.q[:,k] = -work.Q*work.Xref[:,k]
-        work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k]) 
+        work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k])
         if en_state_soc == 1
             for cone_i = 1:socs.ncx
                 work.q[:,k] -= cache.rho*(socs.vcnew[cone_i][:,k] - socs.gc[cone_i][:,k])
@@ -305,6 +304,25 @@ function update_linear_cost!(solver::TinySolver)
     end
 end
 
+function reset_dual!(solver)
+    work = solver.workspace
+    bounds = work.bounds
+    socs = work.socs
+    bounds.y .= zeros(NINPUTS, NHORIZON-1)
+    bounds.g .= zeros(NSTATES, NHORIZON)
+    if en_input_soc == 1
+        for cone_i = 1:socs.ncu
+            socs.yc[cone_i] .= zeros(NINPUTS, NHORIZON-1)
+        end
+    end
+    if en_state_soc == 1
+        for cone_i = 1:socs.ncx
+            socs.gc[cone_i] .= zeros(NSTATES, NHORIZON)
+        end
+    end
+
+end
+
 #Main algorithm loop
 function solve_admm!(solver::TinySolver)
     work = solver.workspace
@@ -313,6 +331,7 @@ function solve_admm!(solver::TinySolver)
     stgs = solver.settings
     socs = work.socs
 
+    # reset_dual!(solver)
     # forward_pass!(solver)
     # update_slack!(solver)
     # update_dual!(solver)
