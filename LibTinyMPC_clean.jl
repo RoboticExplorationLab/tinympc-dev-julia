@@ -1,3 +1,5 @@
+using Printf
+
 #ADMM types
 # NSTATES = 12
 # NINPUTS = 4

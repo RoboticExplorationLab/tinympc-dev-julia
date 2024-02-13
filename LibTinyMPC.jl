@@ -82,18 +82,13 @@ end
 function project_soc(x, mu)
     n = 3 #length(x) -- size of each cone qc[k]
     s = x[n] * mu  # ||v|| = ||u[1:n-1]|| <= u[n] * mu = s
-    # display(x[1:3])
-    # print(x[1:3])
     v = view(x,1:n-1)
     a = norm(v)
     if a <= -s  # below the cone
-        # print("below")
         return [zeros(n); x[n+1:end]]
     elseif a <= s  # in the code
         return x
     elseif a >= abs(s)  # outside the cone
-        # print("outside")
-        # print(size([0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] ))
         return [0.5 * (1 + s/a) * [v; a/mu]; x[n+1:end]] 
     end
 end
