@@ -93,7 +93,7 @@ end
 # ADMM functions
 
 # This one works like codegen
-function backward_pass!(solver::TinySolver)
+function compute_cache!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     work.R = work.R + cache.rho*I
@@ -203,6 +203,7 @@ function update_slack!(solver::TinySolver)
         end
         
         if stgs.en_input_soc == 1 && socs.ncu > 0
+            # print("input soc")
             for cone_i = 1:socs.ncu
                 start = socs.Acu[cone_i]
                 indexes = start:(start+socs.qcu[cone_i]-1)
@@ -226,6 +227,7 @@ function update_slack!(solver::TinySolver)
     # update the last step slack
     bounds.vnew[:,NHORIZON] = work.x[:,NHORIZON] + bounds.g[:,NHORIZON]
     if stgs.en_state_bound == 1
+        print("state bound")
         bounds.vnew[:,NHORIZON] .= min.(xmax[:,NHORIZON], max.(xmin[:,NHORIZON], bounds.vnew[:,NHORIZON]))  # box
     end
 
