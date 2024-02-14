@@ -289,6 +289,7 @@ function update_linear_cost!(solver::TinySolver)
         end
         work.q[:,k] = -work.Q*work.Xref[:,k]
         work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k])
+        # display(norm(work.q[:,k]))
         if en_state_soc == 1
             for cone_i = 1:socs.ncx
                 work.q[:,k] -= cache.rho*(socs.vcnew[cone_i][:,k] - socs.gc[cone_i][:,k])
