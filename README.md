@@ -1,3 +1,5 @@
-# tinympc-julia
+# tinympc-dev-julia
 
-Prototype, examples and code-generation of tinyMPC project in Julia languague.
+TinyMPC prototype and experiment development in Julia (unofficial)
+
+This repository serves as a testing ground for the development of TinyMPC, a compact implementation in the Julia programming language.
