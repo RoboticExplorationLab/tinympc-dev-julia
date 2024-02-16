@@ -234,7 +234,7 @@ function update_slack!(solver::TinySolver)
 
     if stgs.en_state_soc == 1 && socs.ncx > 0
         for cone_i = 1:socs.ncx
-            socs.vcnew[cone_i][:,NHORIZON]  = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
+            socs.vcnew[cone_i][:,NHORIZON] = work.x[:,NHORIZON] + socs.gc[cone_i][:,NHORIZON]
             start = socs.Acx[cone_i]
             indexes = start:(start+socs.qcx[cone_i]-1)
             socs.vcnew[cone_i][indexes, NHORIZON] .= project_soc(socs.vcnew[cone_i][indexes, NHORIZON], socs.cx[cone_i], socs.qcx[cone_i])  # soc

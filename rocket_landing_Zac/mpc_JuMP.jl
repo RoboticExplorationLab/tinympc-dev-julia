@@ -48,10 +48,18 @@ function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
     if params.ncu_cone > 0 
       for k = 1:Nh-1
           u1,u2,u3 = z[uinds[k]]
-          @constraint(model, [α_max * u3, u1, u2] in JuMP.SecondOrderCone())
+          @constraint(model, [0.25 * u3, u1, u2] in JuMP.SecondOrderCone())
       end
     end
     
+    # Thrust angle constraint (SOC): norm([u1,u2]) <= α_max * u3
+    if params.ncx_cone > 0 
+      for k = 1:Nh
+          x1,x2,x3,x4,x5,x6 = z[xinds[k]]
+          @constraint(model, [0.8 * x3, x1, x2] in JuMP.SecondOrderCone())
+      end
+    end
+
     # State Constraints
     if params.ncx > 0 
       for k = 1:Nh
