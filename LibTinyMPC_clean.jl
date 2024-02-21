@@ -184,15 +184,11 @@ function update_slack!(solver::TinySolver)
         # compute the updated slack
         bounds.znew[:,k] = work.u[:,k] + bounds.y[:,k]
         bounds.vnew[:,k] = work.x[:,k] + bounds.g[:,k]
-        if stgs.en_input_soc == 1 && socs.ncu > 0
-            for cone_i = 1:socs.ncu 
-                socs.zcnew[cone_i][:,k]  = work.u[:,k] + socs.yc[cone_i][:,k]
-            end
+        for cone_i = 1:socs.ncu 
+            socs.zcnew[cone_i][:,k]  = work.u[:,k] + socs.yc[cone_i][:,k]
         end
-        if stgs.en_state_soc == 1 && socs.ncx > 0
-            for cone_i = 1:socs.ncx
-                socs.vcnew[cone_i][:,k]  = work.x[:,k] + socs.gc[cone_i][:,k]
-            end
+        for cone_i = 1:socs.ncx
+            socs.vcnew[cone_i][:,k]  = work.x[:,k] + socs.gc[cone_i][:,k]
         end
 
         # project the updated slack
@@ -382,7 +378,7 @@ function solve_admm!(solver::TinySolver)
                 work.dua_res_state = max(work.dua_res_state, maximum(abs.(cache.rho*(socs.vcnew[cone_i]-socs.vc[cone_i]))))
             end
         end
-                
+        
         bounds.v .= bounds.vnew
         bounds.z .= bounds.znew
         socs.vc .= socs.vcnew
@@ -409,16 +405,49 @@ function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
 end
 
 function export_mat_to_c(declare, data)
-    str = "sfloat" * declare * "= {\n"
-    dataT = data'
-    for i = 1:size(dataT, 1)
-        str = str * "  "
-        for j = 1:size(dataT, 2)
-            this_str = @sprintf("%.6f", dataT[i, j])
-            str = str * this_str * "f,"
+    str = "tinytype " * declare * " = {\n"
+    for i = 1:size(data, 1)
+        str = str * "\t"
+        for j = 1:size(data, 2)
+            this_str = @sprintf("%.6f", data[i, j])
+            if i == size(data,1) && j == size(data,2)
+                str = str * this_str * "f"
+            else
+                str = str * this_str * "f, "
+            end
         end
         str = str * "\n"
     end
     str = str * "};"
     return str
 end
+
+function export_vec_to_c(declare, data)
+    str = "tinytype " * declare * " = {"
+    for i = 1:size(data,1)
+        this_str = @sprintf("%.6f", data[i])
+        if i == size(data,1)
+            str = str * this_str * "f"
+        else
+            str = str * this_str * "f, "
+        end
+    end
+    str = str * "};"
+    return str
+end
+
+
+function export_diag_to_c(declare, data)
+    str = "tinytype " * declare * " = {"
+    for i = 1:size(data,1)
+        this_str = @sprintf("%.6f", data[i, i])
+        if i == size(data,1)
+            str = str * this_str * "f"
+        else
+            str = str * this_str * "f, "
+        end
+    end
+    str = str * "};"
+    return str
+end
+
