@@ -99,6 +99,7 @@ function compute_cache!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     work.R = work.R + cache.rho*I
+    work.Q = work.Q + cache.rho*I
     cache.Pinf = work.Q # put your terminal cost here
     for k = 500:-1:1  # enough iterations
         # print(cache.Pinf, "\n")
@@ -118,6 +119,11 @@ function backward_pass_grad!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     for k = (NHORIZON-1):-1:1
+        # display(cache.Quu_inv)
+        # display(work.Bdyn)
+        # display(work.p[:,k+1])
+        # display(work.r[:,k])
+        # display(cache.BPf)
         work.d[:,k] = cache.Quu_inv*(work.Bdyn'*work.p[:,k+1] + work.r[:,k] + cache.BPf)
         work.p[:,k] = work.q[:,k] + cache.AmBKt*work.p[:,k+1] - cache.Kinf'*work.r[:,k] + cache.APf
     end
@@ -127,6 +133,8 @@ function forward_pass!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     for k = 1:(NHORIZON-1)
+        # display(cache.Kinf)
+        # display(work.d[:,k])
         work.u[:,k] = -cache.Kinf*work.x[:,k] - work.d[:,k] 
         work.x[:,k+1] = work.Adyn*work.x[:,k] + work.Bdyn*work.u[:,k] + work.fdyn
     end
@@ -156,6 +164,10 @@ function project_soc(s::Vector{Float64}, mu::Float64, n::Int)
     u0 = s[n]*mu
     u1 = view(s,1:n-1)
     a = norm(u1)
+    # display(s)
+    # display(u0)
+    # display(u1)
+    # display(a)
     if a <= -u0  # below the cone
         # print("below")
         return zeros(n)
@@ -330,7 +342,7 @@ function solve_admm!(solver::TinySolver)
     stgs = solver.settings
     socs = work.socs
 
-    # reset_dual!(solver)
+    reset_dual!(solver)
     # forward_pass!(solver)
     # update_slack!(solver)
     # update_dual!(solver)
@@ -350,6 +362,9 @@ function solve_admm!(solver::TinySolver)
     for k = 1:stgs.max_iter
         #Solver linear system with Riccati
         update_primal!(solver)
+
+        # display(work.x)
+        # display(work.u)
 
         #Project z into feasible domain
         update_slack!(solver)

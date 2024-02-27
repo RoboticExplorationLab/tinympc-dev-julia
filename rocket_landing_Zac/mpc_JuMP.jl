@@ -1,11 +1,11 @@
 # Enable warm-starting
 function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
-    Nh = params.N
+    Nh = params.Nh
     nx = params.nx
     nu = params.nu
     α_max = params.c_cone[3]  # Thrust angle constraint
     NN = Nh*nx + (Nh-1)*nu  # number of decision variables
-    x0 = 1*X[1]  # initial state
+    x0_ = 1*X[1]  # initial state
     
     # we compress x and u into one single decision variable z, 
     # then these are their indices
@@ -42,7 +42,7 @@ function mpc_JuMP(optimizer, params, X, U, A, B, f; warm_start=true)
     end
     
     # Initial condition 
-    @constraint(model, z[xinds[1]] .== x0)
+    @constraint(model, z[xinds[1]] .== x0_)
     
     # Thrust angle constraint (SOC): norm([u1,u2]) <= α_max * u3
     if params.ncu_cone > 0 
