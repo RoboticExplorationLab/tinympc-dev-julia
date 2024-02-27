@@ -95,12 +95,12 @@ end
 # ADMM functions
 
 # This one works like codegen
-function compute_cache!(solver::TinySolver)
+function compute_cache!(solver::TinySolver, Q, R)
     work = solver.workspace
     cache = solver.cache
-    work.R = work.R + cache.rho*I
-    work.Q = work.Q + cache.rho*I
-    cache.Pinf = work.Q # put your terminal cost here
+    work.R = R + cache.rho*I
+    work.Q = Q + cache.rho*I
+    cache.Pinf .= work.Q # put your terminal cost here
     for k = 500:-1:1  # enough iterations
         # print(cache.Pinf, "\n")
         cache.Kinf = (work.R + work.Bdyn'*cache.Pinf*work.Bdyn)\(work.Bdyn'*cache.Pinf*work.Adyn)
@@ -342,7 +342,7 @@ function solve_admm!(solver::TinySolver)
     stgs = solver.settings
     socs = work.socs
 
-    reset_dual!(solver)
+    # reset_dual!(solver)
     # forward_pass!(solver)
     # update_slack!(solver)
     # update_dual!(solver)
@@ -466,3 +466,36 @@ function export_diag_to_c(declare, data)
     return str
 end
 
+
+function reset_solver!(solver)
+    solver.cache.Kinf = zeros(NINPUTS, NSTATES)
+    solver.cache.Pinf = zeros(NSTATES, NSTATES)
+    solver.cache.Quu_inv = zeros(NINPUTS, NINPUTS)
+    solver.cache.AmBKt = zeros(NSTATES, NSTATES)
+    solver.cache.APf = zeros(NSTATES)
+    solver.cache.BPf = zeros(NINPUTS)
+    solver.workspace.bounds.z = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.bounds.znew = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.bounds.v = zeros(NSTATES, NHORIZON)
+    solver.workspace.bounds.vnew = zeros(NSTATES, NHORIZON)
+    solver.workspace.bounds.y = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.bounds.g = zeros(NSTATES, NHORIZON)
+    solver.workspace.socs.zc = [zeros(NINPUTS, NHORIZON-1) for i = 1:2]
+    solver.workspace.socs.zcnew = [zeros(NINPUTS, NHORIZON-1) for i = 1:2]
+    solver.workspace.socs.vc = [zeros(NSTATES, NHORIZON) for i = 1:2]
+    solver.workspace.socs.vcnew = [zeros(NSTATES, NHORIZON) for i = 1:2]
+    solver.workspace.socs.yc = [zeros(NINPUTS, NHORIZON-1) for i = 1:2]
+    solver.workspace.socs.gc = [zeros(NSTATES, NHORIZON) for i = 1:2]
+    solver.workspace.x = zeros(NSTATES, NHORIZON)
+    solver.workspace.u = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.q = zeros(NSTATES, NHORIZON)
+    solver.workspace.r = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.p = zeros(NSTATES, NHORIZON)
+    solver.workspace.d = zeros(NINPUTS, NHORIZON-1)
+    solver.workspace.pri_res_state = 1.0
+    solver.workspace.pri_res_input = 1.0
+    solver.workspace.dua_res_state = 1.0
+    solver.workspace.dua_res_input = 1.0
+    solver.workspace.status = 0
+    solver.workspace.iter = 0
+end

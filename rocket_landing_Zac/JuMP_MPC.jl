@@ -1,12 +1,12 @@
-# mutable struct SolnStats
-#     max_dyn_violation::Float64
-#     avg_dyn_violation::Float64
-#     max_bnd_violation::Float64
-#     avg_bnd_violation::Float64
-#     max_soc_violation::Float64  
-#     avg_soc_violation::Float64
-#     tracking_error::Float64
-# end
+mutable struct SolnStats
+    max_dyn_violation::Float64
+    avg_dyn_violation::Float64
+    max_bnd_violation::Float64
+    avg_bnd_violation::Float64
+    max_soc_violation::Float64  
+    avg_soc_violation::Float64
+    tracking_error::Float64
+end
 
 function stage_cost(p::NamedTuple, x, u, k)
 dx = x - p.Xref[:,k]
