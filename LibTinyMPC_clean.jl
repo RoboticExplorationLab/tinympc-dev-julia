@@ -290,14 +290,14 @@ function update_linear_cost!(solver::TinySolver)
     socs = work.socs
     #This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(NHORIZON-1)
-        work.r[:,k] = -work.R*work.Uref[:,k] # original R??
+        work.r[:,k] = -(work.R-cache.rho*I)*work.Uref[:,k] # original R??
         work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k])  
         if en_input_soc == 1                
             for cone_i = 1:socs.ncu
                 work.r[:,k] -= cache.rho*(socs.zcnew[cone_i][:,k] - socs.yc[cone_i][:,k])
             end 
         end
-        work.q[:,k] = -work.Q*work.Xref[:,k]
+        work.q[:,k] = -(work.Q-cache.rho*I)*work.Xref[:,k]
         work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k])
         # display(norm(work.q[:,k]))
         if en_state_soc == 1
