@@ -377,7 +377,7 @@ function solve_admm!(solver::TinySolver)
         work.pri_res_input = maximum(abs.(work.u-bounds.znew))
         work.dua_res_input = maximum(abs.(cache.rho*(bounds.znew-bounds.z)))
 
-        if en_state_soc == 1 && socs.ncu > 0
+        if en_input_soc == 1 && socs.ncu > 0
             for cone_i = 1:socs.ncu
                 work.pri_res_input = max(work.pri_res_input, maximum(abs.(work.u-socs.zcnew[cone_i])))
                 work.dua_res_input = max(work.dua_res_input, maximum(abs.(cache.rho*(socs.zcnew[cone_i]-socs.zc[cone_i]))))
@@ -387,7 +387,7 @@ function solve_admm!(solver::TinySolver)
         work.pri_res_state = maximum(abs.(work.x-bounds.vnew))
         work.dua_res_state = maximum(abs.(cache.rho*(bounds.vnew-bounds.v)))
 
-        if en_input_soc == 1 && socs.ncx > 0
+        if en_state_soc == 1 && socs.ncx > 0
             for cone_i = 1:socs.ncx
                 work.pri_res_state = max(work.pri_res_state, maximum(abs.(work.x-socs.vcnew[cone_i])))
                 work.dua_res_state = max(work.dua_res_state, maximum(abs.(cache.rho*(socs.vcnew[cone_i]-socs.vc[cone_i]))))
