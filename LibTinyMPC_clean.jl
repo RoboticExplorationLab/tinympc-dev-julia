@@ -413,60 +413,6 @@ function solve_admm!(solver::TinySolver)
     return bounds.znew[1], work.status, work.iter
 end
 
-function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
-    # convert a vector of vectors to a matrix 
-    Xm = hcat(X...)
-    return Xm 
-end
-
-function export_mat_to_c(declare, data)
-    str = "tinytype " * declare * " = {\n"
-    for i = 1:size(data, 1)
-        str = str * "\t"
-        for j = 1:size(data, 2)
-            this_str = @sprintf("%.6f", data[i, j])
-            if i == size(data,1) && j == size(data,2)
-                str = str * this_str * "f"
-            else
-                str = str * this_str * "f, "
-            end
-        end
-        str = str * "\n"
-    end
-    str = str * "};"
-    return str
-end
-
-function export_vec_to_c(declare, data)
-    str = "tinytype " * declare * " = {"
-    for i = 1:size(data,1)
-        this_str = @sprintf("%.6f", data[i])
-        if i == size(data,1)
-            str = str * this_str * "f"
-        else
-            str = str * this_str * "f, "
-        end
-    end
-    str = str * "};"
-    return str
-end
-
-
-function export_diag_to_c(declare, data)
-    str = "tinytype " * declare * " = {"
-    for i = 1:size(data,1)
-        this_str = @sprintf("%.6f", data[i, i])
-        if i == size(data,1)
-            str = str * this_str * "f"
-        else
-            str = str * this_str * "f, "
-        end
-    end
-    str = str * "};"
-    return str
-end
-
-
 function reset_solver!(solver)
     solver.cache.Kinf = zeros(NINPUTS, NSTATES)
     solver.cache.Pinf = zeros(NSTATES, NSTATES)
@@ -498,4 +444,62 @@ function reset_solver!(solver)
     solver.workspace.dua_res_input = 1.0
     solver.workspace.status = 0
     solver.workspace.iter = 0
+end
+
+
+######################################
+# Utility functions
+######################################
+
+function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
+    # convert a vector of vectors to a matrix 
+    Xm = hcat(X...)
+    return Xm 
+end
+
+function export_mat_to_c(declare, data)
+    str = "static const tinytype " * declare * " = {\n"
+    for i = 1:size(data, 1)
+        str = str * "\t"
+        for j = 1:size(data, 2)
+            this_str = @sprintf("%.6f", data[i, j])
+            if i == size(data,1) && j == size(data,2)
+                str = str * this_str * "f"
+            else
+                str = str * this_str * "f, "
+            end
+        end
+        str = str * "\n"
+    end
+    str = str * "};"
+    return str
+end
+
+function export_vec_to_c(declare, data)
+    str = "static const tinytype " * declare * " = {"
+    for i = 1:size(data,1)
+        this_str = @sprintf("%.6f", data[i])
+        if i == size(data,1)
+            str = str * this_str * "f"
+        else
+            str = str * this_str * "f, "
+        end
+    end
+    str = str * "};"
+    return str
+end
+
+
+function export_diag_to_c(declare, data)
+    str = "static const tinytype " * declare * " = {"
+    for i = 1:size(data,1)
+        this_str = @sprintf("%.6f", data[i, i])
+        if i == size(data,1)
+            str = str * this_str * "f"
+        else
+            str = str * this_str * "f, "
+        end
+    end
+    str = str * "};"
+    return str
 end
