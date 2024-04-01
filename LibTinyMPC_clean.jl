@@ -1,11 +1,4 @@
 using Printf
-
-#ADMM types
-# NSTATES = 12
-# NINPUTS = 4
-# NHORIZON = 10
-# NTOTAL = 301
-
 mutable struct TinyCache
     rho::Float64
 end
@@ -314,17 +307,6 @@ function solve_admm!(solver::TinySolver)
     stgs = solver.settings
     socs = work.socs
 
-    # reset_dual!(solver)
-    # forward_pass!(solver)
-    # update_slack!(solver)
-    # update_dual!(solver)
-    # update_linear_cost!(solver)
-
-    # bounds.v .= bounds.vnew
-    # bounds.z .= bounds.znew
-    # socs.vc .= socs.vcnew
-    # socs.zc .= socs.zcnew
-
     work.pri_res_input = 1.0
     work.dua_res_input = 1.0
     work.pri_res_state = 1.0
@@ -344,11 +326,13 @@ function solve_admm!(solver::TinySolver)
         #Dual ascent
         update_dual!(solver)
 
+        #Update cost terms
         update_linear_cost!(solver)
 
         work.pri_res_input = maximum(abs.(work.u - bounds.znew))
         work.dua_res_input = maximum(abs.(cache.rho * (bounds.znew - bounds.z)))
 
+        #Compute residuals
         if en_input_soc == 1 && socs.ncu > 0
             for cone_i = 1:socs.ncu
                 work.pri_res_input = max(work.pri_res_input, maximum(abs.(work.u - socs.zcnew[cone_i])))
