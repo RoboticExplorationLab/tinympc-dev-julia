@@ -119,11 +119,6 @@ function backward_pass_grad!(solver::TinySolver)
     work = solver.workspace
     cache = solver.cache
     for k = (NHORIZON-1):-1:1
-        # display(cache.Quu_inv)
-        # display(work.Bdyn)
-        # display(work.p[:,k+1])
-        # display(work.r[:,k])
-        # display(cache.BPf)
         work.d[:,k] = cache.Quu_inv*(work.Bdyn'*work.p[:,k+1] + work.r[:,k] + cache.BPf)
         work.p[:,k] = work.q[:,k] + cache.AmBKt*work.p[:,k+1] - cache.Kinf'*work.r[:,k] + cache.APf
     end
