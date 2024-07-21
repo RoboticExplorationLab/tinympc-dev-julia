@@ -14,6 +14,8 @@ mutable struct TinyCache
     AmBKt::Matrix{Float64}
     APf::Vector{Float64}
     BPf::Vector{Float64}
+    max_ihlqr_iters = 5000;
+    ihlqr_tol = 1e-10;
 end
 
 mutable struct TinySettings
@@ -25,6 +27,7 @@ mutable struct TinySettings
     en_input_bound::Int;
     en_state_soc::Int;
     en_input_soc::Int;
+    verbose = true;
 end
 
 mutable struct TinyBounds
@@ -101,10 +104,18 @@ function compute_cache!(solver::TinySolver, Q, R)
     work.R = R + cache.rho*I
     work.Q = Q + cache.rho*I
     cache.Pinf .= work.Q # put your terminal cost here
-    for k = 500:-1:1  # enough iterations
+    Kinf_prev = deepcopy(cache.Kinf)
+    for k = 1:cache.max_ihlqr_iters  # enough iterations
         # print(cache.Pinf, "\n")
         cache.Kinf = (work.R + work.Bdyn'*cache.Pinf*work.Bdyn)\(work.Bdyn'*cache.Pinf*work.Adyn)
         cache.Pinf = work.Q + cache.Kinf'*work.R*cache.Kinf + (work.Adyn-work.Bdyn*cache.Kinf)'*cache.Pinf*(work.Adyn-work.Bdyn*cache.Kinf)
+        if norm(cache.Kinf - Kinf_prev, 2) < cache.ihlqr_tol
+            if solver.settings.verbose
+                display("ihlqr converged in " * string(i) * " iterations")
+            end
+            break
+        end
+        Kinf_prev = deepcopy(cache.Kinf)
     end
     cache.AmBKt = (work.Adyn-work.Bdyn*cache.Kinf)'
     cache.APf = cache.AmBKt*cache.Pinf*work.fdyn
