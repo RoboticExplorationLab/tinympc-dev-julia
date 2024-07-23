@@ -1,4 +1,5 @@
 using Printf
+include("quaternion-stuff.jl")
 
 mutable struct TinyCache
     rho::Float64
@@ -8,6 +9,10 @@ mutable struct TinyCache
     AmBKt::Matrix{Float64}
     APf::Vector{Float64}
     BPf::Vector{Float64}
+    Adyn::Matrix{Float64}
+    Bdyn::Matrix{Float64}
+    fdyn::Vector{Float64}
+    xlin::Vector{Float64}
 end
 
 mutable struct TinySettings
@@ -97,9 +102,6 @@ mutable struct TinyWorkspace
 
     Q::Matrix{Float64}
     R::Matrix{Float64}
-    Adyn::Matrix{Float64}
-    Bdyn::Matrix{Float64}
-    fdyn::Vector{Float64}
     
     Xref::Matrix{Float64}
     Uref::Matrix{Float64}
@@ -107,9 +109,9 @@ mutable struct TinyWorkspace
 
     bounds::TinyBounds
     socs::TinySocs
-    function TinyWorkspace(A, B, Q, R, Nh, Xref, Uref)
-        nx = size(A, 1)
-        nu = size(B, 2)
+    function TinyWorkspace(Q, R, Nh, Xref, Uref)
+        nx = size(Q, 1)
+        nu = size(R, 1)
         return new(nx, nu, Nh,
                    zeros(nx, Nh),
                    zeros(nu, Nh-1),
@@ -120,7 +122,7 @@ mutable struct TinyWorkspace
                    
                    1.0, 1.0, 1.0, 1.0, 0, 0,
                    
-                   Q, R, A, B, zeros(nx),
+                   Q, R,
                    
                    Xref, Uref, zeros(nx, nx),
                    
@@ -131,15 +133,14 @@ end
 
 mutable struct TinySolver
     settings::TinySettings
-    cache::TinyCache
+    caches::Vector{TinyCache}
     workspace::TinyWorkspace
-    function TinySolver(A, B, Q, R, Nh, Xref, Uref)
+    function TinySolver(xlin, A, B, Q, R, Nh, Xref, Uref)
         settings = TinySettings()
-        workspace = TinyWorkspace(A, B, Q, R, Nh, Xref, Uref)
-        cache = compute_cache!(1e1, workspace.Adyn, workspace.Bdyn, workspace.fdyn,
-                               workspace.Q, workspace.R; verbose=settings.verbose)
+        workspace = TinyWorkspace(Q, R, Nh, Xref, Uref)
+        cache = compute_cache!(xlin, 1e1, A, B, zeros(nx), Q, R; verbose=settings.verbose)
         workspace.p[:,Nh] = -cache.Pinf*workspace.Xref[:,Nh]
-        return new(settings, cache, workspace)
+        return new(settings, [cache], workspace)
     end
 end
 
@@ -147,9 +148,7 @@ end
 
 
 
-# ADMM functions
-
-function compute_cache!(rho, A, B, f, Q, R; max_iters=5000, tol=1e-10, verbose=false)
+function compute_cache!(xlin, rho, A, B, f, Q, R; max_iters=5000, tol=1e-10, verbose=false)
     R_rho = R + rho*I
     Q_rho = Q + rho*I
     Kinf = zero(B')
@@ -170,28 +169,46 @@ function compute_cache!(rho, A, B, f, Q, R; max_iters=5000, tol=1e-10, verbose=f
     APf = AmBKt*Pinf*f
     BPf = B'*Pinf*f
     Quu_inv = (R + B'*Pinf*B)\I
-    return TinyCache(rho, Kinf, Pinf, Quu_inv, AmBKt, APf, BPf)
+    return TinyCache(rho, Kinf, Pinf, Quu_inv, AmBKt, APf, BPf, A, B, f, xlin)
 end
+
+
+
+
+# Solver functions
 
 # This is the actual backward pass computed online
 function backward_pass_grad!(solver::TinySolver)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     work = solver.workspace
-    cache = solver.cache
-    for k = (solver.workspace.Nh-1):-1:1
-        work.d[:,k] = cache.Quu_inv*(work.Bdyn'*work.p[:,k+1] + work.r[:,k] + cache.BPf)
+    caches = solver.caches
+    # display("start")
+    # prev_cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,work.Nh-1])) for c_ in caches])
+    # display(prev_cache_index)
+    for k = (work.Nh-1):-1:1
+        # get cache corresponding to linearization closest to current state in Xref
+        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
+        cache = caches[cache_index]
+        # if cache_index != prev_cache_index
+        #     prev_cache_index = cache_index
+        #     display(cache_index)
+        # end
+        # do backward pass stuff
+        work.d[:,k] = cache.Quu_inv*(cache.Bdyn'*work.p[:,k+1] + work.r[:,k] + cache.BPf)
         work.p[:,k] = work.q[:,k] + cache.AmBKt*work.p[:,k+1] - cache.Kinf'*work.r[:,k] + cache.APf
     end
 end
 
 function forward_pass!(solver::TinySolver)
     work = solver.workspace
-    cache = solver.cache
+    caches = solver.caches
     for k = 1:(solver.workspace.Nh-1)
-        # display(cache.Kinf)
-        # display(work.d[:,k])
+        # get cache corresponding to linearization closest to current state in Xref
+        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
+        cache = caches[cache_index]
+        # do backward pass stuff
         work.u[:,k] = -cache.Kinf*work.x[:,k] - work.d[:,k] 
-        work.x[:,k+1] = work.Adyn*work.x[:,k] + work.Bdyn*work.u[:,k] + work.fdyn
+        work.x[:,k+1] = cache.Adyn*work.x[:,k] + cache.Bdyn*work.u[:,k] + cache.fdyn
     end
 end
 
@@ -236,7 +253,6 @@ end
 
 function update_slack!(solver::TinySolver)
     work = solver.workspace
-    cache = solver.cache
     stgs = solver.settings
     bounds = work.bounds
     socs = work.socs
@@ -341,12 +357,17 @@ end
 
 function update_linear_cost!(solver::TinySolver)
     work = solver.workspace
-    cache = solver.cache
+    caches = solver.caches
     bounds = work.bounds
     socs = work.socs
     settings = solver.settings
-    #This function updates the linear term in the control cost to handle the changing cost term from ADMM
+    # This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(solver.workspace.Nh-1)
+        # get cache corresponding to linearization closest to current state in Xref
+        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
+        cache = caches[cache_index]
+        
+        # do linear cost update stuff
         work.r[:,k] = -(work.R-cache.rho*I)*work.Uref[:,k] # original R??
         work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k])  
         if settings.en_input_soc == 1
@@ -356,18 +377,22 @@ function update_linear_cost!(solver::TinySolver)
         end
         work.q[:,k] = -(work.Q-cache.rho*I)*work.Xref[:,k]
         work.q[:,k] -= cache.rho*(bounds.vnew[:,k] - bounds.g[:,k])
-        # display(norm(work.q[:,k]))
         if settings.en_state_soc == 1
             for cone_i = 1:socs.ncx
                 work.q[:,k] -= cache.rho*(socs.vcnew[cone_i][:,k] - socs.gc[cone_i][:,k])
             end
         end
     end
-    work.p[:,solver.workspace.Nh] = -cache.Pinf*work.Xref[:,solver.workspace.Nh]
-    work.p[:,solver.workspace.Nh] -= cache.rho*(bounds.vnew[:,solver.workspace.Nh] - bounds.g[:,solver.workspace.Nh])
+
+    # get cache corresponding to linearization closest to current state in Xref
+    cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,Nh])) for c_ in caches])
+    cache = caches[cache_index]
+
+    work.p[:,work.Nh] = -cache.Pinf*work.Xref[:,work.Nh]
+    work.p[:,work.Nh] -= cache.rho*(bounds.vnew[:,work.Nh] - bounds.g[:,work.Nh])
     if settings.en_state_soc == 1
         for cone_i = 1:socs.ncx
-            work.p[:,solver.workspace.Nh] -= cache.rho*(socs.vcnew[cone_i][:,solver.workspace.Nh] - socs.gc[cone_i][:,solver.workspace.Nh])
+            work.p[:,work.Nh] -= cache.rho*(socs.vcnew[cone_i][:,work.Nh] - socs.gc[cone_i][:,work.Nh])
         end
     end
 end
@@ -395,7 +420,7 @@ end
 #Main algorithm loop
 function solve_admm!(solver::TinySolver)
     work = solver.workspace
-    cache = solver.cache
+    cache = solver.caches[1]
     bounds = work.bounds
     stgs = solver.settings
     socs = work.socs
@@ -467,35 +492,35 @@ function solve_admm!(solver::TinySolver)
             break
         end
     end
-    # display("Maximum iteration reached!")
+
     return bounds.znew[1], work.status, work.iter
 end
 
+
+
+
 function reset_solver!(solver)
-    solver.cache.Kinf = zeros(solver.workspace.nu, solver.workspace.nx)
-    solver.cache.Pinf = zeros(solver.workspace.nx, solver.workspace.nx)
-    solver.cache.Quu_inv = zeros(solver.workspace.nu, solver.workspace.nu)
-    solver.cache.AmBKt = zeros(solver.workspace.nx, solver.workspace.nx)
-    solver.cache.APf = zeros(solver.workspace.nx)
-    solver.cache.BPf = zeros(solver.workspace.nu)
-    solver.workspace.bounds.z = zeros(solver.workspace.nu, solver.workspace.Nh-1)
-    solver.workspace.bounds.znew = zeros(solver.workspace.nu, solver.workspace.Nh-1)
-    solver.workspace.bounds.v = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.bounds.vnew = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.bounds.y = zeros(solver.workspace.nu, solver.workspace.Nh-1)
-    solver.workspace.bounds.g = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.socs.zc = [zeros(solver.workspace.nu, solver.workspace.Nh-1) for i = 1:2]
-    solver.workspace.socs.zcnew = [zeros(solver.workspace.nu, solver.workspace.Nh-1) for i = 1:2]
-    solver.workspace.socs.vc = [zeros(solver.workspace.nx, solver.workspace.Nh) for i = 1:2]
-    solver.workspace.socs.vcnew = [zeros(solver.workspace.nx, solver.workspace.Nh) for i = 1:2]
-    solver.workspace.socs.yc = [zeros(solver.workspace.nu, solver.workspace.Nh-1) for i = 1:2]
-    solver.workspace.socs.gc = [zeros(solver.workspace.nx, solver.workspace.Nh) for i = 1:2]
-    solver.workspace.x = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.u = zeros(solver.workspace.nu, solver.workspace.Nh-1)
-    solver.workspace.q = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.r = zeros(solver.workspace.nu, solver.workspace.Nh-1)
-    solver.workspace.p = zeros(solver.workspace.nx, solver.workspace.Nh)
-    solver.workspace.d = zeros(solver.workspace.nu, solver.workspace.Nh-1)
+    nx = solver.workspace.nx
+    nu = solver.workspace.nu
+    Nh = solver.workspace.Nh
+    solver.workspace.bounds.z = zeros(nu, Nh-1)
+    solver.workspace.bounds.znew = zeros(nu, Nh-1)
+    solver.workspace.bounds.v = zeros(nx, Nh)
+    solver.workspace.bounds.vnew = zeros(nx, Nh)
+    solver.workspace.bounds.y = zeros(nu, Nh-1)
+    solver.workspace.bounds.g = zeros(nx, Nh)
+    solver.workspace.socs.zc = [zeros(nu, Nh-1) for i = 1:2]
+    solver.workspace.socs.zcnew = [zeros(nu, Nh-1) for i = 1:2]
+    solver.workspace.socs.vc = [zeros(nx, Nh) for i = 1:2]
+    solver.workspace.socs.vcnew = [zeros(nx, Nh) for i = 1:2]
+    solver.workspace.socs.yc = [zeros(nu, Nh-1) for i = 1:2]
+    solver.workspace.socs.gc = [zeros(nx, Nh) for i = 1:2]
+    solver.workspace.x = zeros(nx, Nh)
+    solver.workspace.u = zeros(nu, Nh-1)
+    solver.workspace.q = zeros(nx, Nh)
+    solver.workspace.r = zeros(nu, Nh-1)
+    solver.workspace.p = zeros(nx, Nh)
+    solver.workspace.d = zeros(nu, Nh-1)
     solver.workspace.pri_res_state = 1.0
     solver.workspace.pri_res_input = 1.0
     solver.workspace.dua_res_state = 1.0
