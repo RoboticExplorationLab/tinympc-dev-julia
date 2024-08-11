@@ -13,7 +13,7 @@ function L(q)
     s = q[1]
     v = q[2:4]
     L = [s    -v';
-         v  s*I+hat(v)]
+         v  s*I(length(v))+hat(v)]
     return L
 end
 
@@ -33,7 +33,7 @@ function rptoq(ϕ)
 end
 
 function qtorp(q)
-    q[2:4]/q[1]
+    q[2:4]./q[1]
 end
 
 function E(q)
