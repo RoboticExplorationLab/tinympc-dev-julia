@@ -42,10 +42,10 @@ mutable struct TinyBounds
     y::Matrix{Float64}
     g::Matrix{Float64}
     function TinyBounds(nx, nu, Nh)
-        return new(repeat(ones(nu)*-1000, 1, Nh-1),
-                   repeat(ones(nu)*1000, 1, Nh-1),
-                   repeat(ones(nx)*-1000, 1, Nh),
-                   repeat(ones(nx)*1000, 1, Nh),
+        return new(repeat(ones(nu)*-99999, 1, Nh-1), # TODO: make these -inf/+inf
+                   repeat(ones(nu)*99999, 1, Nh-1),
+                   repeat(ones(nx)*-99999, 1, Nh),
+                   repeat(ones(nx)*99999, 1, Nh),
                    zeros(nu, Nh-1),
                    zeros(nu, Nh-1),
                    zeros(nx, Nh),
@@ -133,14 +133,14 @@ end
 
 mutable struct TinySolver
     settings::TinySettings
-    caches::Vector{TinyCache}
+    cache::TinyCache
     workspace::TinyWorkspace
     function TinySolver(xlin, A, B, Q, R, Nh, Xref, Uref)
         settings = TinySettings()
         workspace = TinyWorkspace(Q, R, Nh, Xref, Uref)
         cache = compute_cache!(xlin, 1e1, A, B, zeros(nx), Q, R; verbose=settings.verbose)
         workspace.p[:,Nh] = -cache.Pinf*workspace.Xref[:,Nh]
-        return new(settings, [cache], workspace)
+        return new(settings, cache, workspace)
     end
 end
 
@@ -181,18 +181,8 @@ end
 function backward_pass_grad!(solver::TinySolver)
     #This is just the linear/gradient term from the backward pass (no cost-to-go Hessian or K calculations)
     work = solver.workspace
-    caches = solver.caches
-    # display("start")
-    # prev_cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,work.Nh-1])) for c_ in caches])
-    # display(prev_cache_index)
+    cache = solver.cache
     for k = (work.Nh-1):-1:1
-        # get cache corresponding to linearization closest to current state in Xref
-        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
-        cache = caches[cache_index]
-        # if cache_index != prev_cache_index
-        #     prev_cache_index = cache_index
-        #     display(cache_index)
-        # end
         # do backward pass stuff
         work.d[:,k] = cache.Quu_inv*(cache.Bdyn'*work.p[:,k+1] + work.r[:,k] + cache.BPf)
         work.p[:,k] = work.q[:,k] + cache.AmBKt*work.p[:,k+1] - cache.Kinf'*work.r[:,k] + cache.APf
@@ -201,11 +191,8 @@ end
 
 function forward_pass!(solver::TinySolver)
     work = solver.workspace
-    caches = solver.caches
+    cache = solver.cache
     for k = 1:(solver.workspace.Nh-1)
-        # get cache corresponding to linearization closest to current state in Xref
-        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
-        cache = caches[cache_index]
         # do backward pass stuff
         work.u[:,k] = -cache.Kinf*work.x[:,k] - work.d[:,k] 
         work.x[:,k+1] = cache.Adyn*work.x[:,k] + cache.Bdyn*work.u[:,k] + cache.fdyn
@@ -236,17 +223,11 @@ function project_soc(s::Vector{Float64}, mu::Float64, n::Int)
     u0 = s[n]*mu
     u1 = view(s,1:n-1)
     a = norm(u1)
-    # display(s)
-    # display(u0)
-    # display(u1)
-    # display(a)
     if a <= -u0  # below the cone
-        # print("below")
         return zeros(n)
     elseif a <= u0  # in the code
         return (s)
     elseif a >= abs(u0)  # outside the cone
-        # print("outside")
         return (0.5 * (1 + u0/a) * [u1; a/mu])
     end
 end
@@ -281,7 +262,6 @@ function update_slack!(solver::TinySolver)
 
         if stgs.en_state_bound == 1
             bounds.vnew[:,k] .= min.(xmax[:,k], max.(xmin[:,k], bounds.vnew[:,k]))
-            # display(bounds.vnew[:,k])
         end
         
         if stgs.en_input_soc == 1 && socs.ncu > 0
@@ -299,10 +279,6 @@ function update_slack!(solver::TinySolver)
                 socs.vcnew[cone_i][indexes, k] .= project_soc(socs.vcnew[cone_i][indexes, k], socs.cx[cone_i], socs.qcx[cone_i])  # soc
             end
         end
-
-        # if stgs.en_hplane_state == 1
-        #     v[k] .= project_hyperplane(0, 0, g[k] + x[k], stgs.Acx[k], stgs.bcx[k])  # half-space 
-        # end        
     end
 
     # update the last step slack
@@ -319,10 +295,6 @@ function update_slack!(solver::TinySolver)
             socs.vcnew[cone_i][indexes, solver.workspace.Nh] .= project_soc(socs.vcnew[cone_i][indexes, solver.workspace.Nh], socs.cx[cone_i], socs.qcx[cone_i])  # soc
         end
     end
-
-    # if stgs.en_hplane_state == 1
-    #     v[solver.workspace.Nh] .= project_hyperplane(0, 0, g[solver.workspace.Nh] + x[solver.workspace.Nh], params.Acx[solver.workspace.Nh], params.bcx[solver.workspace.Nh])  
-    # end
 end
 
 function update_dual!(solver::TinySolver)
@@ -330,8 +302,8 @@ function update_dual!(solver::TinySolver)
     bounds = work.bounds
     socs = work.socs
     settings = solver.settings
-    #This function performs the standard AL multiplier update.
-    #Note that we're using the "scaled form" where y = λ/ρ
+    # This function performs the standard AL multiplier update.
+    # Note that we're using the "scaled form" where y = λ/ρ
     for k = 1:(solver.workspace.Nh-1)
         bounds.y[:,k] .= bounds.y[:,k] + work.u[:,k] - bounds.znew[:,k]
         bounds.g[:,k] .= bounds.g[:,k] + work.x[:,k] - bounds.vnew[:,k]
@@ -357,17 +329,13 @@ end
 
 function update_linear_cost!(solver::TinySolver)
     work = solver.workspace
-    caches = solver.caches
+    cache = solver.cache
     bounds = work.bounds
     socs = work.socs
     settings = solver.settings
     # This function updates the linear term in the control cost to handle the changing cost term from ADMM
     for k = 1:(solver.workspace.Nh-1)
-        # get cache corresponding to linearization closest to current state in Xref
-        cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,k])) for c_ in caches])
-        cache = caches[cache_index]
-        
-        # do linear cost update stuff
+        # Do linear cost update stuff
         work.r[:,k] = -(work.R-cache.rho*I)*work.Uref[:,k] # original R??
         work.r[:,k] -= cache.rho*(bounds.znew[:,k] - bounds.y[:,k])  
         if settings.en_input_soc == 1
@@ -383,10 +351,6 @@ function update_linear_cost!(solver::TinySolver)
             end
         end
     end
-
-    # get cache corresponding to linearization closest to current state in Xref
-    cache_index = argmin([q_distance(c_.xlin[4:7], rptoq(work.Xref[4:6,Nh])) for c_ in caches])
-    cache = caches[cache_index]
 
     work.p[:,work.Nh] = -cache.Pinf*work.Xref[:,work.Nh]
     work.p[:,work.Nh] -= cache.rho*(bounds.vnew[:,work.Nh] - bounds.g[:,work.Nh])
@@ -420,21 +384,10 @@ end
 #Main algorithm loop
 function solve_admm!(solver::TinySolver)
     work = solver.workspace
-    cache = solver.caches[1]
+    cache = solver.cache
     bounds = work.bounds
     stgs = solver.settings
     socs = work.socs
-
-    # reset_dual!(solver)
-    # forward_pass!(solver)
-    # update_slack!(solver)
-    # update_dual!(solver)
-    # update_linear_cost!(solver)
-
-    # bounds.v .= bounds.vnew
-    # bounds.z .= bounds.znew
-    # socs.vc .= socs.vcnew
-    # socs.zc .= socs.zcnew
 
     work.pri_res_input = 1.0
     work.dua_res_input = 1.0
@@ -445,9 +398,6 @@ function solve_admm!(solver::TinySolver)
     for k = 1:stgs.max_iter
         #Solver linear system with Riccati
         update_primal!(solver)
-
-        # display(work.x)
-        # display(work.u)
 
         #Project z into feasible domain
         update_slack!(solver)
@@ -531,7 +481,7 @@ end
 
 
 ######################################
-# Utility functions
+# Utility functions for converting matrices/vectors into C arrays
 ######################################
 
 function mat_from_vec(X::Vector{Vector{Float64}})::Matrix
